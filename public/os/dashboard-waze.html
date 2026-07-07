@@ -12,22 +12,28 @@
 :root {
   --primaria: #1FBF63;
   --primaria-escura: #008036;
-  --primaria-clara: #E9F5EE;
+  --primaria-clara: rgba(31,191,99,.14);
   --preto-brasao: #0A0F0C;
-  --verde: #1a6e45;
-  --verde-claro: #e8f5ee;
-  --verde-medio: #2d9e65;
-  --amarelo: #f5a623;
-  --laranja: #e07b1a;
-  --cinza-bg: #f4f5f7;
-  --cinza-borda: #e0e4e8;
-  --cinza-texto: #5a6473;
-  --cinza-escuro: #1e2532;
-  --azul: #1a6eb4;
-  --azul-claro: #e8f0fa;
-  --vermelho: #d32f2f;
-  --vermelho-claro: #fdecea;
-  --sombra: 0 2px 12px rgba(0,0,0,0.08);
+  --verde: #6ee7a8;
+  --verde-claro: rgba(31,191,99,.15);
+  --verde-medio: #2fbf72;
+  --amarelo: #f5b942;
+  --laranja: #f6a94a;
+  --cinza-bg: #0A0F0C;
+  --cinza-borda: #2A362E;
+  --cinza-texto: #9AA6A0;
+  --cinza-escuro: #F1F5F2;
+  --azul: #7fb5f0;
+  --azul-claro: rgba(59,130,246,.16);
+  --vermelho: #ef6c60;
+  --vermelho-claro: rgba(192,57,43,.16);
+  --sombra: 0 4px 18px rgba(0,0,0,0.45);
+  --cinza-card: #12180F;
+  --surface-2: #1A2318;
+  --barra: #0E140F;
+  --violeta: #c9b3ec;
+  --violeta-claro: rgba(138,95,208,.18);
+  --laranja-claro: rgba(245,169,74,.16);
   /* cores Waze */
   --w1: #f5a623; /* 1–2 relatos */
   --w2: #e07b1a; /* 3–5 relatos */
@@ -39,7 +45,7 @@ body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background
 
 /* ── Topo ── */
 .topo {
-  background: var(--primaria-escura); color: white;
+  background: var(--barra); color: var(--cinza-escuro); border-bottom: 1px solid var(--cinza-borda);
   padding: 16px 28px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
 }
@@ -56,16 +62,16 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 
 /* ── Token banner ── */
 .token-banner {
-  background: #fff8e1; border-bottom: 2px solid #f5a623;
+  background: rgba(245,169,74,.12); border-bottom: 1px solid rgba(245,169,74,.4);
   padding: 14px 28px;
 }
 .token-inner { max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
-.token-inner > div:first-child { font-size: 14px; font-weight: 600; color: #7a5200; }
+.token-inner > div:first-child { font-size: 14px; font-weight: 600; color: var(--amarelo); }
 .token-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .token-form input {
   flex: 1; min-width: 260px; padding: 9px 12px; border: 1.5px solid #f5a623;
   border-radius: 8px; font-size: 13px; font-family: monospace;
-  background: white; color: var(--cinza-escuro);
+  background: var(--cinza-card); color: var(--cinza-escuro);
 }
 .token-form button {
   padding: 9px 18px; background: var(--laranja); color: white; border: none;
@@ -77,7 +83,7 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 
 /* ── Filtros ── */
 .filtros-bar {
-  background: white; border-bottom: 1px solid var(--cinza-borda);
+  background: var(--cinza-card); border-bottom: 1px solid var(--cinza-borda);
   padding: 14px 28px;
 }
 .filtros-inner {
@@ -88,7 +94,7 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 .filtro-grupo label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--cinza-texto); }
 .filtro-grupo input, .filtro-grupo select {
   padding: 8px 12px; border: 1.5px solid var(--cinza-borda); border-radius: 8px;
-  font-size: 13px; color: var(--cinza-escuro); background: white;
+  font-size: 13px; color: var(--cinza-escuro); background: var(--cinza-card);
   min-width: 130px;
 }
 .filtro-grupo select { cursor: pointer; min-width: 180px; max-width: 240px; }
@@ -111,8 +117,8 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 @media (max-width: 700px) { .cards { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 440px) { .cards { grid-template-columns: 1fr; } }
 .card-stat {
-  background: white; border-radius: 14px; padding: 18px;
-  box-shadow: var(--sombra); border-top: 4px solid var(--cinza-borda);
+  background: var(--cinza-card); border-radius: 14px; padding: 18px;
+  box-shadow: var(--sombra); border: 1px solid var(--cinza-borda); border-top: 4px solid var(--cinza-borda);
 }
 .card-stat .num { font-size: 34px; font-weight: 800; line-height: 1.1; color: var(--cinza-escuro); }
 .card-stat .rotulo { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--cinza-texto); margin-top: 4px; }
@@ -122,7 +128,7 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 .paineis { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 900px) { .paineis { grid-template-columns: 1fr; } }
 .painel {
-  background: white; border-radius: 14px; padding: 20px;
+  background: var(--cinza-card); border-radius: 14px; padding: 20px;
   box-shadow: var(--sombra); min-width: 0; overflow: hidden;
 }
 .painel h2 {
@@ -159,7 +165,7 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 .barra-topo { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
 .barra-topo .qtd { font-weight: 700; color: var(--laranja); }
 .barra-topo .nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
-.barra-fundo { height: 9px; background: var(--cinza-bg); border-radius: 5px; overflow: hidden; }
+.barra-fundo { height: 9px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
 .barra-fill { height: 100%; background: var(--laranja); border-radius: 5px; }
 .barra-fill.dia { background: var(--azul); }
 .barra-fill.bairro { background: var(--verde-medio); }
@@ -169,14 +175,14 @@ button.btn-nav { border: none; cursor: pointer; font-family: inherit; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
   text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
-  color: var(--cinza-texto); padding: 8px 10px; border-bottom: 2px solid var(--cinza-bg);
+  color: var(--cinza-texto); padding: 8px 10px; border-bottom: 2px solid var(--cinza-borda);
   cursor: pointer; user-select: none; white-space: nowrap;
 }
 th:hover { color: var(--laranja); }
 th .sort-icon { font-size: 9px; margin-left: 3px; opacity: 0.5; }
 th.ativo .sort-icon { opacity: 1; color: var(--laranja); }
-td { padding: 9px 10px; border-bottom: 1px solid var(--cinza-bg); vertical-align: middle; }
-tr:hover td { background: #fafbfc; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--cinza-borda); vertical-align: middle; }
+tr:hover td { background: var(--surface-2); }
 .badge-relato {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px;
@@ -273,7 +279,7 @@ tr:hover td { background: #fafbfc; }
       <div class="sub-num" id="stRelatosConf"></div>
     </div>
     <div class="card-stat" style="border-top-color:#f5a623">
-      <div class="num" id="stRuas" style="color:#8c5200">–</div>
+      <div class="num" id="stRuas" style="color:var(--laranja)">–</div>
       <div class="rotulo">Ruas identificadas</div>
       <div class="sub-num" id="stRuasTotal"></div>
     </div>
@@ -780,7 +786,7 @@ async function carregar() {
     // banco vazio → orienta o usuário a fazer a primeira sincronização
     if (json.bancoVazio) {
       document.getElementById('erro').innerHTML =
-        `<div class="erro-box" style="background:#fff8e1;color:#7a5200">📭 Nenhum dado no banco ainda. Clique em <strong>🔄 Atualizar dados</strong> e cole um token para a primeira sincronização.</div>`;
+        `<div class="erro-box" style="background:rgba(245,169,74,.12);color:var(--amarelo);border:1px solid rgba(245,169,74,.35);padding:12px 14px;border-radius:10px">📭 Nenhum dado no banco ainda. Clique em <strong>🔄 Atualizar dados</strong> e cole um token para a primeira sincronização.</div>`;
       mostrarTokenBanner();
     }
 
