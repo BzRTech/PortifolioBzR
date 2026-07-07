@@ -469,8 +469,9 @@ textarea.form-input { min-height: 80px; resize: vertical; }
   #listaOS .os-card { margin-bottom: 0; }
   #listaOS .empty-state, #listaOS .loading { grid-column: 1 / -1; }
 
-  /* Formulários e relatório em duas colunas */
-  #section-nova, #section-relatorio { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  /* Formulários e relatório em duas colunas (apenas quando a aba está ativa;
+     usar só #section-* sobreporia o display:none das seções inativas) */
+  #section-nova.active, #section-relatorio.active { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
   #section-nova > .form-card, #section-relatorio > .form-card { margin-bottom: 0; }
   #section-nova > #alertNova, #section-nova > #btnSalvarNova,
   #section-relatorio > a, #section-relatorio > .form-card:first-of-type { grid-column: 1 / -1; }
