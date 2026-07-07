@@ -85,7 +85,14 @@ ortofoto e um dashboard de gestão que responde perguntas como:
 
 ### Importando dados reais
 
-Copie os arquivos para `data/` e rode:
+**Pela plataforma (recomendado):** abra **`/importar`** (botão "Importar" no
+topo do mapa), informe o município, arraste seus `.geojson`/`.json` e clique em
+**Importar tudo**. A camada de cada arquivo é detectada pelo nome (ajustável),
+os dados vão em lotes direto para o banco (nada precisa ser reimplantado) e as
+áreas/extensões em metros são calculadas automaticamente. Em produção, proteja
+a página definindo `IMPORT_TOKEN` (veja `.env.example`).
+
+**Pela linha de comando:** copie os arquivos para `data/` e rode:
 
 ```bash
 # 1a cidade (o --municipio marca os dados e habilita o seletor de cidade):

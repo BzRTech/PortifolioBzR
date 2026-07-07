@@ -36,6 +36,19 @@ function toInt(v) {
   return n === null ? null : Math.round(n);
 }
 
+// Area/comprimento so sao aceitos se forem plausiveis em metros. Exports do
+// ArcGIS em EPSG:4326 trazem Shape_Area/Shape_Length em GRAUS (valores ~1e-8),
+// que nao servem como m². Nesses casos devolvemos null e deixamos o PostGIS
+// recalcular a partir da geometria (ST_Area/ST_Length em geography).
+function areaVal(v) {
+  const n = toNum(v);
+  return n !== null && n >= 1 ? n : null;
+}
+function lenVal(v) {
+  const n = toNum(v);
+  return n !== null && n >= 1 ? n : null;
+}
+
 function toStr(v) {
   if (v === undefined || v === null) return null;
   const s = String(v).trim();
@@ -108,6 +121,36 @@ function toBool(v) {
   return null;
 }
 
+/**
+ * Infere pavimentacao a partir de um texto livre de situacao/obra (ex.: campo
+ * "Seinfra_03": "CBUQ - CONCLUÍDA", "PLANEJADA", "NÃO PAVIMENTADA"). Primeiro
+ * testa os termos de "nao pavimentada / obra ainda nao executada"; depois os de
+ * "pavimentada". Devolve null quando nao reconhece.
+ */
+function pavFromText(v) {
+  const raw = toStr(v);
+  if (!raw) return null;
+  const s = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/(nao pavimentad|sem pavimentac|planejad|contratad|licitac|elaboracao|projeto|analise|andamento|leito natural|\bterra\b|\bchao\b)/.test(s)) return false;
+  if (/(asfalt|cbuq|paralelepiped|paralelo|bloquete|concreto|intertravad|calcament|revestiment|pavimentad|concluid)/.test(s)) return true;
+  return null;
+}
+
+/** Deriva um rotulo de tipo de pavimento (para o grafico "por tipo") a partir
+ *  de um texto livre de situacao/obra. Devolve null se nao reconhecer. */
+function surfaceFromText(v) {
+  const raw = toStr(v);
+  if (!raw) return null;
+  const s = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/asfalt|cbuq/.test(s)) return 'Asfalto';
+  if (/paralelepiped|paralelo/.test(s)) return 'Paralelepípedo';
+  if (/bloquete/.test(s)) return 'Bloquete';
+  if (/intertravad/.test(s)) return 'Intertravado';
+  if (/concreto/.test(s)) return 'Concreto';
+  if (/leito natural|\bterra\b/.test(s)) return 'Leito natural';
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Mapeamento por camada: (props) -> { colunas... }
 // ---------------------------------------------------------------------------
@@ -118,7 +161,7 @@ const MAPPERS = {
     map: (p) => ({
       nome: normBairro(pick(p, ['nome', 'name', 'bairro', 'nm_bairro', 'no_bairro', 'bairro_nome'])),
       populacao: toInt(pick(p, ['populacao', 'população', 'pop', 'habitantes', 'qt_pop', 'populacao_estimada', 'population'])),
-      area_m2: toNum(pick(p, ['area_m2', 'area', 'shape_area', 'st_area', 'area_total'])),
+      area_m2: areaVal(pick(p, ['area_m2', 'area', 'shape_area', 'st_area', 'area_total'])),
     }),
   },
   quadras: {
@@ -126,43 +169,49 @@ const MAPPERS = {
     map: (p) => ({
       codigo: toStr(pick(p, ['codigo', 'código', 'code', 'quadra', 'cod_quadra', 'id_quadra', 'numero'])),
       bairro: normBairro(pick(p, ['bairro', 'nm_bairro', 'no_bairro', 'neighborhood'])),
-      area_m2: toNum(pick(p, ['area_m2', 'area', 'shape_area', 'st_area'])),
+      area_m2: areaVal(pick(p, ['area_m2', 'area', 'shape_area', 'st_area'])),
     }),
   },
   lotes: {
     columns: ['codigo', 'quadra', 'bairro', 'uso', 'area_m2'],
     map: (p) => {
       const st = toStr(pick(p, ['st', 'setor']));
-      const qd = toStr(pick(p, ['quadra', 'qd', 'cod_quadra', 'id_quadra', 'block']));
+      const qd = toStr(pick(p, ['quadra', 'qd', 'cod_quadra', 'id_quadra', 'qdr', 'block']));
       const lt = toStr(pick(p, ['lt', 'lote']));
-      const cod = toStr(pick(p, ['codigo', 'código', 'code', 'inscricao', 'inscrição', 'insc_geral', 'matricula', 'id_lote']));
+      const cod = toStr(pick(p, ['codigo', 'código', 'code', 'geocod_nov', 'geocodigo', 'geocod', 'inscricao', 'inscrição', 'insc_geral', 'matricula', 'id_lote']));
       return {
         // Usa o codigo direto; se ausente, compoe Setor.Quadra.Lote.
         codigo: cod || ([st, qd, lt].some(Boolean) ? [st, qd, lt].filter(Boolean).join('-') : null),
         quadra: qd,
         bairro: normBairro(pick(p, ['bairro', 'nm_bairro', 'no_bairro', 'neighborhood'])),
         uso: toStr(pick(p, ['uso', 'use', 'uso_solo', 'uso_do_solo', 'categoria', 'tipo_uso', 'land_use'])),
-        area_m2: toNum(pick(p, ['area_m2', 'area', 'arealote', 'area_lote', 'shape_area', 'st_area'])),
+        area_m2: areaVal(pick(p, ['area_m2', 'area', 'arealote', 'area_lote', 'shape_area', 'st_area'])),
       };
     },
   },
   ruas: {
     columns: ['codigo', 'nome', 'bairro', 'pavimentada', 'tipo_pavimento', 'extensao_m'],
     map: (p) => {
-      const tipo = toStr(pick(p, ['tipo_pavimento', 'pavimento', 'tipo_pav', 'revestimento', 'surface', 'tipo']));
-      // Le a situacao (pavimentada/nao) de varios campos; se ausente, infere do tipo.
-      let pav = toBool(pick(p, ['pavimentada', 'pavimentado', 'paviment', 'pavimentacao', 'pavimentação', 'paved', 'situacao_pavimento', 'status', 'situacao']));
-      if (pav === null && tipo) pav = toBool(tipo);
+      // Tipo de pavimento explicito (ex.: "TIPO_PAVIM": "ASFALTO").
+      let tipo = toStr(pick(p, ['tipo_pavimento', 'pavimento', 'tipo_pav', 'tipo_pavim', 'revestimento', 'surface', 'tipo']));
+      // Texto livre de situacao da obra (ex.: "Seinfra_03": "CBUQ - CONCLUÍDA").
+      const situacao = pick(p, ['situacao_obra', 'status_obra', 'seinfra_03', 'situacao', 'status']);
+      // Situacao pavimentada/nao: campos booleanos -> situacao textual -> tipo.
+      let pav = toBool(pick(p, ['pavimentada', 'pavimentado', 'paviment', 'pavimentacao', 'pavimentação', 'paved', 'situacao_pavimento']));
+      if (pav === null) pav = pavFromText(situacao);
+      if (pav === null && tipo) pav = toBool(tipo) ?? pavFromText(tipo);
+      // Quando nao ha tipo explicito, deriva um rotulo a partir da situacao.
+      if (!tipo) tipo = surfaceFromText(situacao);
       return {
         // Codigo UNITARIO da via (logradouro). As feicoes sao trechos; varios
         // trechos compartilham o mesmo codigo. NAO usar id_trecho aqui.
-        codigo: toStr(pick(p, ['id_rua', 'cod_rua', 'codigo', 'cod_logradouro', 'cod_logr', 'cod_via', 'id_logradouro'])),
-        nome: toStr(pick(p, ['nome', 'name', 'logradouro', 'rua', 'nm_rua', 'descricao', 'nm_logr'])),
+        codigo: toStr(pick(p, ['id_rua', 'cod_rua', 'codigo', 'cod_logradouro', 'cod_logr', 'codi_logr', 'cod_via', 'id_logradouro'])),
+        nome: toStr(pick(p, ['nome', 'name', 'logradouro', 'nomecomp', 'rua', 'nm_rua', 'descricao', 'nm_logr'])),
         bairro: normBairro(pick(p, ['bairro', 'nm_bairro', 'no_bairro', 'neighborhood'])),
         pavimentada: pav,
         tipo_pavimento: tipo,
         // COMP_TRECH/COMP_RUA em metros; evita Shape_Leng (vem em graus).
-        extensao_m: toNum(pick(p, ['extensao_m', 'extensao', 'extensão', 'comp_trech', 'comp_rua', 'comprimento', 'length', 'st_length'])),
+        extensao_m: lenVal(pick(p, ['extensao_m', 'extensao', 'extensão', 'comp_trech', 'comp_rua', 'comprimento', 'length', 'st_length'])),
       };
     },
   },
@@ -173,7 +222,7 @@ const MAPPERS = {
       uso: toStr(pick(p, ['uso', 'use', 'tipo_uso', 'categoria', 'finalidade'])),
       bairro: normBairro(pick(p, ['bairro', 'nm_bairro', 'no_bairro', 'neighborhood'])),
       n_pavimentos: toInt(pick(p, ['n_pavimentos', 'pavimentos', 'andares', 'n_andares', 'floors', 'num_pav', 'qt_pavimentos'])),
-      area_m2: toNum(pick(p, ['area_m2', 'area', 'shape_area', 'st_area', 'area_construida'])),
+      area_m2: areaVal(pick(p, ['area_m2', 'area', 'shape_area', 'st_area', 'area_construida'])),
     }),
   },
 };
@@ -200,17 +249,20 @@ export function detectLayer(filename) {
 }
 
 /**
- * Importa um FeatureCollection (objeto JS) para a tabela da camada indicada.
+ * Insere um lote de feicoes (array de Features GeoJSON) na tabela da camada.
+ * Opcionalmente limpa a camada antes (`truncate`), respeitando o escopo do
+ * municipio. NAO recalcula area/extensao — chame `backfillMeasures` ao final
+ * (util para importacao em varios lotes, ex.: a partir da pagina web).
  * @returns { inserted, skipped }
  */
-export async function importFeatureCollection(layer, featureCollection, options = {}) {
+export async function insertFeatures(layer, features, options = {}) {
   const mapper = MAPPERS[layer];
   if (!mapper) throw new Error('Camada invalida: ' + layer);
 
-  const features = (featureCollection && featureCollection.features) || [];
-  const { truncate = false, municipio = null, batchSize = 200, onProgress } = options;
+  const { truncate = false, municipio = null, batchSize = 200 } = options;
   const cols = mapper.columns;
   const multiType = GEOM_MULTI[layer];
+  const list = Array.isArray(features) ? features : [];
 
   let inserted = 0;
   let skipped = 0;
@@ -226,7 +278,7 @@ export async function importFeatureCollection(layer, featureCollection, options 
     }
 
     const rows = [];
-    for (const feat of features) {
+    for (const feat of list) {
       if (!feat || !feat.geometry) { skipped++; continue; }
       const rawProps = feat.properties || {};
       const mapped = mapper.map(rawProps);
@@ -238,11 +290,18 @@ export async function importFeatureCollection(layer, featureCollection, options 
       const chunk = rows.slice(i, i + batchSize);
       await insertChunk(client, layer, cols, multiType, chunk, municipio);
       inserted += chunk.length;
-      if (onProgress) onProgress(inserted, rows.length);
     }
   });
 
-  // Preenche area/extensao geografica (em metros) quando ausente (escopo do municipio).
+  return { inserted, skipped };
+}
+
+/**
+ * Recalcula area (m²) / extensao (m) geografica das feicoes cujo valor ficou
+ * ausente, a partir da geometria. Escopo opcional por municipio.
+ */
+export async function backfillMeasures(layer, municipio = null) {
+  if (!MAPPERS[layer]) throw new Error('Camada invalida: ' + layer);
   const scope = municipio ? 'municipio = $1' : 'TRUE';
   const scopeParams = municipio ? [municipio] : [];
   if (layer === 'ruas') {
@@ -252,7 +311,20 @@ export async function importFeatureCollection(layer, featureCollection, options 
     await query(`UPDATE ${layer} SET area_m2 = ST_Area(geom::geography)
                  WHERE area_m2 IS NULL AND geom IS NOT NULL AND ${scope}`, scopeParams);
   }
+}
 
+/**
+ * Importa um FeatureCollection (objeto JS) para a tabela da camada indicada.
+ * @returns { inserted, skipped }
+ */
+export async function importFeatureCollection(layer, featureCollection, options = {}) {
+  const { truncate = false, municipio = null, batchSize = 200, onProgress } = options;
+  const features = (featureCollection && featureCollection.features) || [];
+
+  const { inserted, skipped } = await insertFeatures(layer, features, { truncate, municipio, batchSize });
+  if (onProgress) onProgress(inserted, features.length);
+
+  await backfillMeasures(layer, municipio);
   return { inserted, skipped };
 }
 

@@ -16,13 +16,20 @@ import {
 } from './src/queries.js';
 import { seedDemo } from './scripts/seed-demo.js';
 import { osRouter, ensureOsSchema } from './src/os.js';
+import { IMPORT_LAYERS, insertFeatures, backfillMeasures } from './src/import.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 
+// Token opcional para proteger as rotas de escrita de importacao (/api/import).
+// Se definido, a pagina de importacao precisa envia-lo no cabecalho
+// `x-import-token`. Sem ele, as rotas ficam abertas (util em desenvolvimento).
+const IMPORT_TOKEN = process.env.IMPORT_TOKEN || '';
+
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+// Limite generoso: importacao de GeoJSON em lote e fotos das O.S. (base64).
+app.use(express.json({ limit: '25mb' }));
 
 // ---- Tiles locais da ortofoto (opcional) ---------------------------------
 const localTilesDir = path.join(__dirname, 'tiles');
@@ -148,6 +155,53 @@ app.get('/api/layers/:layer', asyncRoute(async (req, res) => {
     includeProps: req.query.props === '1' || req.query.props === 'true',
   });
   res.json(fc);
+}));
+
+// ---- Importacao de GeoJSON pela plataforma (/importar) --------------------
+// Fluxo (feito pela pagina, em lotes): POST /api/import/:layer com um pedaco
+// das feicoes (truncate=true so no primeiro pedaco de cada camada) e, ao final,
+// POST /api/import/:layer/finalize para recalcular areas/extensoes.
+function requireImportToken(req, res, next) {
+  if (!IMPORT_TOKEN) return next();
+  const sent = req.get('x-import-token') || '';
+  if (sent === IMPORT_TOKEN) return next();
+  return res.status(401).json({ error: 'Token de importacao invalido ou ausente.' });
+}
+
+app.get('/api/import/config', (req, res) => {
+  res.json({ layers: IMPORT_LAYERS, tokenRequired: Boolean(IMPORT_TOKEN), dbConfigured: isConfigured });
+});
+
+app.post('/api/import/:layer', requireImportToken, asyncRoute(async (req, res) => {
+  if (!requireDb(res)) return;
+  const { layer } = req.params;
+  if (!IMPORT_LAYERS.includes(layer)) {
+    return res.status(404).json({ error: 'Camada invalida: ' + layer });
+  }
+  const body = req.body || {};
+  const features = body.features;
+  if (!Array.isArray(features)) {
+    return res.status(400).json({ error: 'Envie { features: [...] } com pelo menos 1 feicao.' });
+  }
+  if (features.length > 2000) {
+    return res.status(400).json({ error: 'Maximo de 2000 feicoes por requisicao (envie em lotes).' });
+  }
+  const municipio = body.municipio ? String(body.municipio) : null;
+  const truncate = body.truncate === true || body.truncate === 'true';
+  const { inserted, skipped } = await insertFeatures(layer, features, { municipio, truncate });
+  res.json({ ok: true, inserted, skipped });
+}));
+
+app.post('/api/import/:layer/finalize', requireImportToken, asyncRoute(async (req, res) => {
+  if (!requireDb(res)) return;
+  const { layer } = req.params;
+  if (!IMPORT_LAYERS.includes(layer)) {
+    return res.status(404).json({ error: 'Camada invalida: ' + layer });
+  }
+  const municipio = req.body && req.body.municipio ? String(req.body.municipio) : null;
+  await backfillMeasures(layer, municipio);
+  const counts = await getCounts(municipio);
+  res.json({ ok: true, counts });
 }));
 
 // ---- Boot -----------------------------------------------------------------

@@ -191,9 +191,12 @@ async function checkData(config) {
     if (total === 0) {
       showMessage(`<h2>Nenhum dado carregado</h2>
         <p>O banco está conectado, mas vazio.</p>
-        <p>Rode <code>npm run seed</code> (cidade de demonstração) ou
-        <code>npm run import -- --dir data/</code> com seus GeoJSON.</p>
-        <button class="btn btn-primary" id="msg-ok">Continuar</button>`);
+        <p>Importe seus GeoJSON pela página de importação
+        (ou rode <code>npm run seed</code> para a cidade de demonstração).</p>
+        <p style="margin-top:16px">
+          <a class="btn btn-primary" href="/importar" style="text-decoration:none">⬆ Importar dados</a>
+          <button class="btn" id="msg-ok" style="margin-left:8px">Continuar mesmo assim</button>
+        </p>`);
       document.getElementById('msg-ok').onclick = hideMessage;
       return false;
     }

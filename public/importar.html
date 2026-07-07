@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
+  <title>BzR Território — Importar dados</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    /* Pagina de importacao — reaproveita as variaveis de cor do styles.css */
+    body { overflow: auto; display: block; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 22px 18px 60px; }
+    .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .page-head img { width: 40px; height: 40px; }
+    .page-head h1 { font-size: 20px; margin: 0; font-weight: 800; letter-spacing: .3px; }
+    .page-head .brand-accent { color: var(--brand); }
+    .page-head small { color: var(--text-dim); font-size: 12px; }
+    .back { margin-left: auto; }
+    .lead { color: var(--text-dim); font-size: 13.5px; line-height: 1.5; margin: 4px 0 20px; }
+    .panel-box {
+      background: var(--bg-elev); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+    }
+    .panel-box h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-dim); margin: 0 0 14px; }
+    .row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .fld { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
+    .fld label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+    .fld input[type="text"], .fld input[type="password"] {
+      background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 9px; padding: 9px 11px; font-size: 14px;
+    }
+    .fld input:focus { outline: none; border-color: var(--accent); }
+    .hint { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+    .modes { display: flex; gap: 18px; margin-top: 4px; }
+    .modes label { display: flex; align-items: center; gap: 7px; font-size: 13.5px; cursor: pointer; }
+    input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+    .dropzone {
+      border: 2px dashed var(--line); border-radius: var(--radius);
+      padding: 34px 18px; text-align: center; cursor: pointer;
+      transition: .15s; background: var(--bg-elev-2);
+    }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(31,191,99,.06); }
+    .dropzone .ic { font-size: 34px; }
+    .dropzone .t { font-weight: 700; margin-top: 8px; }
+    .dropzone .s { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+    table.files { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+    table.files th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    table.files td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    table.files .fn { font-weight: 600; word-break: break-all; }
+    table.files select {
+      background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 8px; padding: 6px 8px; font-size: 13px;
+    }
+    .num { font-variant-numeric: tabular-nums; }
+    .rm { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+    .rm:hover { background: var(--bg-elev-2); color: var(--danger); }
+
+    .st { font-size: 12px; font-weight: 700; }
+    .st.pending { color: var(--text-dim); }
+    .st.working { color: var(--accent); }
+    .st.done { color: var(--ok); }
+    .st.err { color: var(--danger); }
+    .miniprog { height: 5px; background: var(--bg-elev-2); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+    .miniprog > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+    .actions { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+    .prog-overall { flex: 1; height: 10px; background: var(--bg-elev-2); border-radius: 6px; overflow: hidden; }
+    .prog-overall > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+
+    .log { background: #060a07; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text-dim); max-height: 240px; overflow: auto; white-space: pre-wrap; }
+    .log b { color: var(--text); }
+    .log .ok { color: var(--ok); }
+    .log .err { color: var(--danger); }
+    .banner { border-radius: 10px; padding: 11px 14px; font-size: 13px; margin-bottom: 14px; display: none; }
+    .banner.show { display: block; }
+    .banner.warn { background: rgba(251,146,60,.12); color: #fdba74; border: 1px solid rgba(251,146,60,.3); }
+    .banner.err { background: rgba(192,57,43,.14); color: #f3b6b1; border: 1px solid rgba(192,57,43,.4); }
+    a.btn-link { text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-head">
+      <img src="/assets/bzr-mark.svg" alt="BzR" />
+      <div>
+        <h1>BzR <span class="brand-accent">Território</span> — Importar dados</h1>
+        <small>Carregue seus GeoJSON (lotes, quadras, ruas, edificações, bairros)</small>
+      </div>
+      <a class="btn back btn-link" href="/">← Voltar ao mapa</a>
+    </div>
+
+    <p class="lead">
+      Selecione ou arraste seus arquivos <code>.geojson</code> / <code>.json</code>.
+      A camada de cada arquivo é detectada pelo nome (você pode ajustar).
+      Os dados são enviados em lotes direto para o banco — nada precisa ser
+      reimplantado. Coordenadas devem estar em <strong>WGS84 (EPSG:4326)</strong>.
+    </p>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="panel-box">
+      <h2>1 · Configuração</h2>
+      <div class="row">
+        <div class="fld">
+          <label for="municipio">Município</label>
+          <input type="text" id="municipio" placeholder="Ex.: João Pessoa" autocomplete="off" />
+          <span class="hint">Marca os dados e habilita o seletor de cidade no mapa. Recomendado.</span>
+        </div>
+        <div class="fld" id="tokenField" style="display:none">
+          <label for="token">Senha de importação</label>
+          <input type="password" id="token" placeholder="Token configurado no servidor" autocomplete="off" />
+          <span class="hint">Definida na variável <code>IMPORT_TOKEN</code> do servidor.</span>
+        </div>
+      </div>
+      <div class="fld" style="margin-top:14px">
+        <label>Ao importar cada camada</label>
+        <div class="modes">
+          <label><input type="radio" name="mode" value="replace" checked /> Substituir os dados existentes</label>
+          <label><input type="radio" name="mode" value="append" /> Adicionar aos existentes</label>
+        </div>
+        <span class="hint" id="modeHint">Com um município preenchido, "substituir" troca apenas os dados daquela cidade.</span>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <h2>2 · Arquivos</h2>
+      <div class="dropzone" id="dropzone">
+        <div class="ic">🗺️</div>
+        <div class="t">Arraste os GeoJSON aqui ou clique para escolher</div>
+        <div class="s">Vários arquivos de uma vez · lotes, quadras, ruas, edificações, bairros</div>
+        <input type="file" id="fileInput" accept=".geojson,.json,application/geo+json,application/json" multiple hidden />
+      </div>
+      <div id="fileTableWrap"></div>
+    </div>
+
+    <div class="panel-box">
+      <h2>3 · Importar</h2>
+      <div class="actions">
+        <button class="btn btn-primary" id="btnImport" aria-pressed="true" disabled>Importar tudo</button>
+        <div class="prog-overall"><span id="progOverall"></span></div>
+      </div>
+      <div class="log" id="log" style="margin-top:14px;display:none"></div>
+    </div>
+  </div>
+
+  <script>
+    const LAYER_LABELS = {
+      bairros: 'Bairros', quadras: 'Quadras', lotes: 'Lotes',
+      ruas: 'Ruas', edificacoes: 'Edificações',
+    };
+    let LAYERS = Object.keys(LAYER_LABELS);
+    let tokenRequired = false;
+    const CHUNK = 400;
+
+    const els = {
+      banner: document.getElementById('banner'),
+      municipio: document.getElementById('municipio'),
+      token: document.getElementById('token'),
+      tokenField: document.getElementById('tokenField'),
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('fileInput'),
+      fileTableWrap: document.getElementById('fileTableWrap'),
+      btnImport: document.getElementById('btnImport'),
+      progOverall: document.getElementById('progOverall'),
+      log: document.getElementById('log'),
+      modeHint: document.getElementById('modeHint'),
+    };
+
+    let files = []; // { file, name, layer, features|null, count, status, prog }
+
+    function detectLayer(name) {
+      const f = name.toLowerCase();
+      if (/bairro|neighborhood|distrit/.test(f)) return 'bairros';
+      if (/quadra|block/.test(f)) return 'quadras';
+      if (/lote|parcel|parcela/.test(f)) return 'lotes';
+      if (/rua|via|logr|street|road|eixo/.test(f)) return 'ruas';
+      if (/edific|edifica|build|constru|imovel|imóvel/.test(f)) return 'edificacoes';
+      return 'lotes';
+    }
+
+    function showBanner(type, html) {
+      els.banner.className = 'banner show ' + type;
+      els.banner.innerHTML = html;
+    }
+    function hideBanner() { els.banner.className = 'banner'; }
+
+    function fmt(n) { return (n ?? 0).toLocaleString('pt-BR'); }
+
+    function logLine(html) {
+      els.log.style.display = 'block';
+      els.log.innerHTML += html + '\n';
+      els.log.scrollTop = els.log.scrollHeight;
+    }
+
+    async function loadConfig() {
+      try {
+        const r = await fetch('/api/import/config');
+        const c = await r.json();
+        if (Array.isArray(c.layers) && c.layers.length) LAYERS = c.layers;
+        tokenRequired = !!c.tokenRequired;
+        els.tokenField.style.display = tokenRequired ? 'flex' : 'none';
+        if (!c.dbConfigured) {
+          showBanner('err', '<strong>Banco não configurado.</strong> Defina a variável <code>DATABASE_URL</code> no servidor antes de importar.');
+        }
+      } catch (e) { /* segue com defaults */ }
+    }
+
+    function renderTable() {
+      if (!files.length) { els.fileTableWrap.innerHTML = ''; els.btnImport.disabled = true; return; }
+      const rows = files.map((f, i) => `
+        <tr>
+          <td class="fn">${f.name}</td>
+          <td>
+            <select data-i="${i}" class="layer-sel">
+              ${LAYERS.map((l) => `<option value="${l}" ${l === f.layer ? 'selected' : ''}>${LAYER_LABELS[l] || l}</option>`).join('')}
+            </select>
+          </td>
+          <td class="num">${f.count == null ? '…' : fmt(f.count)}</td>
+          <td>
+            <div class="st ${f.status}">${statusLabel(f)}</div>
+            <div class="miniprog"><span style="width:${Math.round((f.prog || 0) * 100)}%"></span></div>
+          </td>
+          <td><button class="rm" data-rm="${i}" title="Remover">✕</button></td>
+        </tr>`).join('');
+      els.fileTableWrap.innerHTML = `
+        <table class="files">
+          <thead><tr><th>Arquivo</th><th>Camada</th><th>Feições</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      els.fileTableWrap.querySelectorAll('.layer-sel').forEach((s) => {
+        s.addEventListener('change', (e) => { files[+e.target.dataset.i].layer = e.target.value; });
+      });
+      els.fileTableWrap.querySelectorAll('[data-rm]').forEach((b) => {
+        b.addEventListener('click', (e) => { files.splice(+e.target.dataset.rm, 1); renderTable(); });
+      });
+      els.btnImport.disabled = !files.some((f) => f.count > 0);
+    }
+
+    function statusLabel(f) {
+      if (f.status === 'working') return 'Enviando… ' + Math.round((f.prog || 0) * 100) + '%';
+      if (f.status === 'done') return '✓ ' + fmt(f.inserted) + ' importadas';
+      if (f.status === 'err') return '✕ ' + (f.error || 'erro');
+      return f.count == null ? 'Lendo…' : 'Pronto';
+    }
+
+    async function addFiles(fileList) {
+      hideBanner();
+      for (const file of fileList) {
+        if (!/\.(geo)?json$/i.test(file.name)) continue;
+        const entry = { file, name: file.name, layer: detectLayer(file.name), features: null, count: null, status: 'pending', prog: 0 };
+        files.push(entry);
+        renderTable();
+        // Le e parseia em background para mostrar a contagem.
+        readAndParse(entry).then(renderTable).catch((err) => {
+          entry.status = 'err'; entry.error = 'JSON inválido'; entry.count = 0;
+          logLine(`<span class="err">✕ ${entry.name}: não foi possível ler (${err.message})</span>`);
+          renderTable();
+        });
+      }
+    }
+
+    function readAndParse(entry) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            const feats = Array.isArray(data) ? data
+              : Array.isArray(data.features) ? data.features
+              : data.type === 'Feature' ? [data] : null;
+            if (!feats) throw new Error('sem FeatureCollection');
+            entry.features = feats;
+            entry.count = feats.length;
+            resolve();
+          } catch (e) { reject(e); }
+        };
+        reader.onerror = () => reject(new Error('falha de leitura'));
+        reader.readAsText(entry.file);
+      });
+    }
+
+    function totalFeatures() { return files.reduce((s, f) => s + (f.count || 0), 0); }
+
+    async function postChunk(layer, payload) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (tokenRequired && els.token.value) headers['x-import-token'] = els.token.value.trim();
+      const r = await fetch('/api/import/' + layer, { method: 'POST', headers, body: JSON.stringify(payload) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      return j;
+    }
+
+    async function finalize(layer, municipio) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (tokenRequired && els.token.value) headers['x-import-token'] = els.token.value.trim();
+      const r = await fetch('/api/import/' + layer + '/finalize', { method: 'POST', headers, body: JSON.stringify({ municipio }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      return j;
+    }
+
+    async function runImport() {
+      const ready = files.filter((f) => f.count > 0);
+      if (!ready.length) return;
+      const municipio = els.municipio.value.trim() || null;
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+
+      if (mode === 'replace' && !municipio) {
+        const ok = confirm('Sem município preenchido, "substituir" apaga TODA a tabela de cada camada (todas as cidades). Deseja continuar?');
+        if (!ok) return;
+      }
+      if (tokenRequired && !els.token.value.trim()) {
+        showBanner('warn', 'Informe a senha de importação para continuar.');
+        return;
+      }
+
+      els.btnImport.disabled = true;
+      els.municipio.disabled = true;
+      els.log.style.display = 'block';
+      els.log.innerHTML = '';
+      logLine(`<b>Iniciando importação</b>${municipio ? ' — município: ' + municipio : ''}`);
+
+      const truncatedLayers = new Set();
+      const totalFeat = totalFeatures();
+      let sentFeat = 0;
+      const layersTouched = new Set();
+
+      for (const entry of ready) {
+        entry.status = 'working'; entry.prog = 0; entry.inserted = 0; renderTable();
+        const layer = entry.layer;
+        layersTouched.add(layer);
+        logLine(`\n<b>${entry.name}</b> → ${LAYER_LABELS[layer] || layer} (${fmt(entry.count)} feições)`);
+        try {
+          for (let i = 0; i < entry.features.length; i += CHUNK) {
+            const chunk = entry.features.slice(i, i + CHUNK);
+            const truncate = mode === 'replace' && !truncatedLayers.has(layer);
+            const res = await postChunk(layer, { municipio, truncate, features: chunk });
+            truncatedLayers.add(layer);
+            entry.inserted += res.inserted || 0;
+            sentFeat += chunk.length;
+            entry.prog = Math.min(1, (i + chunk.length) / entry.features.length);
+            els.progOverall.style.width = Math.round((sentFeat / totalFeat) * 100) + '%';
+            renderTable();
+          }
+          entry.status = 'done'; entry.prog = 1; renderTable();
+          logLine(`<span class="ok">  ✓ ${fmt(entry.inserted)} importadas</span>`);
+        } catch (err) {
+          entry.status = 'err'; entry.error = err.message; renderTable();
+          logLine(`<span class="err">  ✕ erro: ${err.message}</span>`);
+        }
+      }
+
+      // Recalcula áreas/extensões de cada camada tocada.
+      logLine(`\n<b>Finalizando (áreas/extensões)…</b>`);
+      for (const layer of layersTouched) {
+        try {
+          const res = await finalize(layer, municipio);
+          if (res.counts) logLine(`  ${LAYER_LABELS[layer] || layer}: ${fmt(res.counts[layer])} no banco`);
+        } catch (err) {
+          logLine(`<span class="err">  ✕ finalize ${layer}: ${err.message}</span>`);
+        }
+      }
+
+      els.progOverall.style.width = '100%';
+      const okCount = ready.filter((f) => f.status === 'done').length;
+      logLine(`\n<b class="ok">Concluído.</b> ${okCount}/${ready.length} arquivo(s) importado(s).`);
+      showBanner('warn', 'Importação concluída. Abra o <a href="/" style="color:inherit;text-decoration:underline">mapa</a> para conferir os dados.');
+      els.banner.className = 'banner show warn';
+      els.municipio.disabled = false;
+      els.btnImport.disabled = false;
+    }
+
+    // ---- eventos ----
+    els.dropzone.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', (e) => { addFiles(e.target.files); els.fileInput.value = ''; });
+    ['dragover', 'dragenter'].forEach((ev) => els.dropzone.addEventListener(ev, (e) => { e.preventDefault(); els.dropzone.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach((ev) => els.dropzone.addEventListener(ev, (e) => { e.preventDefault(); els.dropzone.classList.remove('drag'); }));
+    els.dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+    els.btnImport.addEventListener('click', runImport);
+    document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', () => {
+      els.modeHint.textContent = document.querySelector('input[name="mode"]:checked').value === 'replace'
+        ? 'Com um município preenchido, "substituir" troca apenas os dados daquela cidade.'
+        : 'As feições serão adicionadas às já existentes na camada.';
+    }));
+
+    loadConfig();
+  </script>
+</body>
+</html>

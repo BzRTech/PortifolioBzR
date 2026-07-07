@@ -14,6 +14,9 @@ services:
         sync: false
       - key: ORTHO_TILE_URL
         sync: false
+      # Senha da pagina de importacao (/importar). Recomendado definir em producao.
+      - key: IMPORT_TOKEN
+        sync: false
       # Mude para "true" para carregar a cidade de demonstracao no primeiro deploy
       # (somente se o banco estiver vazio). Use "false" com dados reais.
       - key: SEED_DEMO
