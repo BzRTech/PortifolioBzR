@@ -1,0 +1,27 @@
+{
+  "name": "bzr-gestao-publica",
+  "version": "1.0.0",
+  "description": "BzR — plataforma de gestão pública municipal: Território (WebGIS de lotes, quadras, ruas e edificações com dashboard, mapa de calor e ortofoto) e Ordens de Serviço (infraestrutura + buracos do Waze). PostGIS + Neon + Render.",
+  "main": "server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "init-db": "node scripts/init-db.js",
+    "seed": "node scripts/seed-demo.js",
+    "import": "node scripts/import-geojson.js",
+    "derive-bairros": "node scripts/derive-bairros.js",
+    "reset-db": "node scripts/reset-db.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.13.1"
+  },
+  "author": "BzRTech",
+  "license": "MIT"
+}

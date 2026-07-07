@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BzR Ordens de Serviço | Infraestrutura</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%97%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  /* paleta BzR: verde e grafite */
+  --primaria: #1FBF63;
+  --primaria-escura: #008036;
+  --primaria-clara: #E9F5EE;
+  --preto-brasao: #0A0F0C;
+  --verde: #1a6e45;
+  --verde-claro: #e8f5ee;
+  --verde-medio: #2d9e65;
+  --verde-escuro: #0d4a2e;
+  --amarelo: #f5a623;
+  --laranja: #e07b1a;
+  --cinza-bg: #f4f5f7;
+  --cinza-card: #ffffff;
+  --cinza-borda: #e0e4e8;
+  --cinza-texto: #5a6473;
+  --cinza-escuro: #1e2532;
+  --azul: #1a6eb4;
+  --azul-claro: #e8f0fa;
+  --vermelho: #d32f2f;
+  --vermelho-claro: #fdecea;
+  --sombra: 0 2px 12px rgba(0,0,0,0.08);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--cinza-bg);
+  color: var(--cinza-escuro);
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* HEADER */
+.header {
+  background: var(--primaria-escura);
+  color: white;
+  padding: 14px 16px;
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-logo {
+  width: 38px; height: 38px;
+  background: var(--preto-brasao);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.header-title { font-size: 15px; font-weight: 700; }
+.header-sub { font-size: 11px; opacity: 0.65; margin-top: 1px; }
+.btn-config {
+  background: rgba(255,255,255,0.12); border: none; color: white; cursor: pointer;
+  width: 38px; height: 38px; border-radius: 10px;
+  font-size: 18px; display: flex; align-items: center; justify-content: center;
+}
+
+/* STATS BAR */
+.stats-bar {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--primaria-escura);
+  padding: 0 12px 14px; gap: 8px;
+}
+.stat-item {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 10px 6px;
+  text-align: center; color: white;
+}
+.stat-num { font-size: 22px; font-weight: 700; line-height: 1; }
+.stat-label { font-size: 9px; opacity: 0.7; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* NAV TABS */
+.nav-tabs {
+  display: flex; background: white;
+  border-bottom: 1px solid var(--cinza-borda);
+  overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: 66px; z-index: 99;
+}
+.nav-tabs::-webkit-scrollbar { display: none; }
+.nav-tab {
+  flex: 1; min-width: 80px;
+  padding: 12px 8px; border: none; background: none;
+  font-size: 12px; font-weight: 600; color: var(--cinza-texto);
+  cursor: pointer; border-bottom: 3px solid transparent;
+  transition: all 0.2s; white-space: nowrap;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.nav-tab.active { color: var(--primaria); border-bottom-color: var(--primaria); }
+.nav-tab:hover { background: var(--cinza-bg); }
+
+/* CONTENT */
+.content { padding: 14px 14px 80px; }
+.section { display: none; }
+.section.active { display: block; }
+
+/* CARDS OS */
+.os-card {
+  background: white; border-radius: var(--radius);
+  padding: 14px; margin-bottom: 10px;
+  box-shadow: var(--sombra); cursor: pointer;
+  transition: transform 0.15s;
+  border-left: 4px solid var(--cinza-borda);
+}
+.os-card:active { transform: scale(0.98); }
+.os-card.aberta { border-left-color: var(--azul); }
+.os-card.validada { border-left-color: #8a5fd0; }
+.os-card.andamento { border-left-color: var(--amarelo); }
+.os-card.concluida { border-left-color: var(--verde-medio); }
+.os-card.cancelada { border-left-color: var(--vermelho); }
+
+.os-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.os-numero { font-size: 12px; font-weight: 700; color: var(--primaria); font-family: monospace; }
+.os-badge {
+  font-size: 10px; font-weight: 700;
+  padding: 3px 8px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0;
+}
+.badge-aberta { background: var(--azul-claro); color: var(--azul); }
+.badge-validada { background: #f0e9fb; color: #6a3fb5; }
+.badge-andamento { background: #fff8e6; color: var(--laranja); }
+.badge-concluida { background: var(--verde-claro); color: var(--verde); }
+.badge-cancelada { background: var(--vermelho-claro); color: var(--vermelho); }
+
+.os-titulo { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--cinza-escuro); line-height: 1.3; }
+.os-info-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.os-info-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--cinza-texto); }
+
+.os-fotos-row {
+  display: flex; gap: 8px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--cinza-bg);
+}
+.foto-pill {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 20px;
+}
+.foto-pill.tem { background: var(--verde-claro); color: var(--verde); }
+.foto-pill.nao { background: var(--cinza-bg); color: var(--cinza-texto); }
+
+/* FORM */
+.form-card {
+  background: white; border-radius: var(--radius);
+  padding: 18px; margin-bottom: 12px; box-shadow: var(--sombra);
+}
+.form-card-title {
+  font-size: 13px; font-weight: 700; color: var(--primaria-escura);
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 2px solid var(--primaria-clara);
+  display: flex; align-items: center; gap: 8px;
+}
+.form-group { margin-bottom: 13px; }
+.form-label {
+  display: block; font-size: 11px; font-weight: 700;
+  color: var(--cinza-texto); margin-bottom: 5px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.req { color: var(--vermelho); }
+.form-input {
+  width: 100%; padding: 11px 13px;
+  border: 1.5px solid var(--cinza-borda); border-radius: var(--radius-sm);
+  font-size: 14px; color: var(--cinza-escuro); background: white;
+  transition: border-color 0.2s; -webkit-appearance: none; appearance: none;
+}
+.form-input:focus { outline: none; border-color: var(--primaria); }
+.form-input[readonly] { background: #f9fafb; color: var(--cinza-texto); }
+select.form-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a6473' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+textarea.form-input { min-height: 80px; resize: vertical; }
+
+/* FOTO */
+.foto-upload-area {
+  border: 2px dashed var(--cinza-borda); border-radius: var(--radius);
+  padding: 20px 16px; text-align: center; cursor: pointer;
+  transition: all 0.2s; background: white;
+}
+.foto-upload-area:hover, .foto-upload-area:active { border-color: var(--primaria); background: var(--primaria-clara); }
+.foto-upload-icon { font-size: 32px; margin-bottom: 6px; }
+.foto-upload-text { font-size: 13px; color: var(--cinza-escuro); font-weight: 600; }
+.foto-upload-sub { font-size: 11px; color: var(--cinza-texto); margin-top: 3px; }
+
+.foto-preview-wrap { margin-top: 10px; position: relative; }
+.foto-preview-img {
+  width: 100%; border-radius: var(--radius-sm);
+  max-height: 220px; object-fit: cover;
+  border: 2px solid var(--cinza-borda); display: block;
+}
+.foto-remove-btn {
+  position: absolute; top: 6px; right: 6px;
+  background: rgba(0,0,0,0.6); color: white; border: none;
+  width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+}
+.fotos-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.foto-thumb { position: relative; }
+.foto-thumb img {
+  width: 100%; height: 105px; object-fit: cover; display: block;
+  border-radius: 10px; border: 2px solid var(--cinza-borda); cursor: pointer;
+}
+.foto-thumb .foto-remove-btn { top: 4px; right: 4px; width: 24px; height: 24px; font-size: 12px; }
+.foto-botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.foto-botoes .foto-upload-area { padding: 12px 8px; }
+
+/* BTNS */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 700; border: none; cursor: pointer;
+  transition: all 0.15s; letter-spacing: 0.2px;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--primaria); color: white; }
+.btn-primary:hover { background: var(--primaria-escura); }
+.btn-secondary { background: var(--cinza-bg); color: var(--cinza-escuro); border: 1.5px solid var(--cinza-borda); }
+.btn-danger { background: var(--vermelho-claro); color: var(--vermelho); border: 1.5px solid #f5c6c6; }
+.btn-warning { background: #fff3cd; color: #856404; border: 1.5px solid #ffc107; }
+.btn-success { background: var(--verde-claro); color: var(--verde-escuro); border: 1.5px solid #a8d5b8; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1; min-width: 120px; font-size: 13px; padding: 11px; }
+
+/* CONFIG PANEL */
+.config-panel {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 200;
+  display: none; align-items: flex-end;
+  max-width: 480px; margin: auto;
+}
+.config-panel.open { display: flex; }
+.config-sheet {
+  background: white; border-radius: 20px 20px 0 0;
+  padding: 20px; width: 100%; max-height: 80vh; overflow-y: auto;
+}
+.config-handle { width: 40px; height: 4px; background: var(--cinza-borda); border-radius: 2px; margin: 0 auto 18px; }
+.config-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+
+/* MODAL DETALHES */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--cinza-bg); z-index: 300;
+  display: none; overflow-y: auto;
+  max-width: 480px; margin: auto;
+}
+.modal-overlay.open { display: block; }
+.modal-header {
+  background: var(--primaria-escura); color: white;
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  position: sticky; top: 0; z-index: 10;
+}
+.modal-back {
+  background: rgba(255,255,255,0.15); border: none; color: white;
+  width: 36px; height: 36px; border-radius: 10px;
+  font-size: 18px; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-body { padding: 14px 14px 80px; }
+
+/* TIMELINE */
+.timeline { display: flex; flex-direction: column; gap: 0; margin: 6px 0; }
+.timeline-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding-bottom: 14px; position: relative;
+}
+.timeline-item::before {
+  content: ''; position: absolute;
+  left: 14px; top: 28px; bottom: 0;
+  width: 2px; background: var(--cinza-borda);
+}
+.timeline-item:last-child::before { display: none; }
+.timeline-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; border: 2px solid white;
+  box-shadow: var(--sombra);
+}
+.timeline-body { flex: 1; }
+.timeline-title { font-size: 13px; font-weight: 700; }
+.timeline-time { font-size: 11px; color: var(--cinza-texto); margin-top: 1px; }
+.timeline-obs { font-size: 12px; color: var(--cinza-texto); margin-top: 3px; }
+
+/* SEARCH */
+.search-box {
+  display: flex; align-items: center; gap: 10px;
+  background: white; border: 1.5px solid var(--cinza-borda);
+  border-radius: var(--radius); padding: 10px 13px; margin-bottom: 12px;
+}
+.search-box input {
+  border: none; outline: none; font-size: 14px; flex: 1;
+  color: var(--cinza-escuro); background: transparent;
+}
+
+/* CHIPS */
+.filter-chips { display: flex; gap: 7px; overflow-x: auto; margin-bottom: 14px; scrollbar-width: none; padding-bottom: 3px; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.chip {
+  white-space: nowrap; padding: 6px 13px;
+  border-radius: 20px; font-size: 12px; font-weight: 600;
+  border: 1.5px solid var(--cinza-borda); background: white;
+  cursor: pointer; transition: all 0.15s; color: var(--cinza-texto); flex-shrink: 0;
+}
+.chip.active { background: var(--primaria-escura); color: white; border-color: var(--primaria-escura); }
+
+/* FAB */
+.fab {
+  position: fixed; bottom: 22px; right: 22px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--primaria); color: white;
+  border: none; font-size: 28px; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(31,191,99,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; transition: all 0.2s;
+}
+.fab:active { transform: scale(0.92); }
+
+/* ALERTS */
+.alert {
+  padding: 11px 14px; border-radius: var(--radius-sm);
+  margin-bottom: 12px; font-size: 13px; font-weight: 500;
+  display: flex; align-items: center; gap: 8px;
+}
+.alert-success { background: var(--verde-claro); color: var(--verde-escuro); }
+.alert-error { background: var(--vermelho-claro); color: var(--vermelho); }
+.alert-info { background: var(--azul-claro); color: var(--azul); }
+.alert-warning { background: #fff8e6; color: var(--laranja); }
+
+/* DB STATUS */
+.db-status {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 13px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; margin-bottom: 14px;
+}
+.db-status.connected { background: var(--verde-claro); color: var(--verde-escuro); }
+.db-status.disconnected { background: var(--vermelho-claro); color: var(--vermelho); }
+.db-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+/* EMPTY */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--cinza-texto); }
+.empty-state-icon { font-size: 52px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 16px; margin-bottom: 6px; color: var(--cinza-escuro); }
+.empty-state p { font-size: 13px; line-height: 1.5; }
+
+/* INFO TABLE */
+.info-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.info-table td { padding: 6px 0; vertical-align: top; }
+.info-table td:first-child { color: var(--cinza-texto); width: 42%; }
+.info-table td:last-child { font-weight: 600; }
+
+/* TAG ORIGEM */
+.tag-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #efe8fa; color: #6a3fb5;
+  border: 1px solid #d8c8f2;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px;
+}
+.btn-sugestao {
+  display: inline-block; margin-top: 6px; cursor: pointer;
+  background: var(--azul-claro); color: var(--azul);
+  border: 1px solid #b9d4f2; border-radius: 8px;
+  font-size: 12px; font-weight: 700; padding: 5px 10px;
+}
+
+/* RECORRÊNCIA */
+.recorrente-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff3e0; color: var(--laranja);
+  border: 1px solid #f5cf9b;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px;
+}
+
+/* PRIORIDADE */
+.prio-alta { color: var(--vermelho); font-weight: 700; }
+.prio-media { color: var(--laranja); font-weight: 700; }
+.prio-baixa { color: var(--verde-medio); font-weight: 700; }
+
+/* LOADING */
+.loading { text-align: center; padding: 36px; color: var(--cinza-texto); }
+.spinner {
+  width: 30px; height: 30px; margin: 0 auto 10px;
+  border: 3px solid var(--cinza-borda);
+  border-top-color: var(--primaria);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* DIVIDER */
+.divider-label {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--cinza-texto);
+  margin: 16px 0 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.divider-label::after { content: ''; flex: 1; height: 1px; background: var(--cinza-borda); }
+
+/* TOAST */
+.toast {
+  position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+  background: var(--cinza-escuro); color: white;
+  padding: 12px 20px; border-radius: 24px;
+  font-size: 13px; font-weight: 600; z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  animation: toastIn 0.25s ease;
+  white-space: nowrap;
+}
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* FOTO GRANDE */
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+  z-index: 999; display: flex; align-items: center; justify-content: center;
+}
+.lightbox img { max-width: 95%; max-height: 90vh; border-radius: 8px; object-fit: contain; }
+.lightbox-close {
+  position: absolute; top: 16px; right: 16px;
+  background: rgba(255,255,255,0.2); color: white; border: none;
+  width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+@media (max-width: 360px) {
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .stat-num { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <a href="/" title="BzR Território"><img class="header-logo" src="/assets/bzr-mark.svg" alt="BzR" style="width:38px;height:38px;border-radius:10px;display:block"></a>
+    <div>
+      <div class="header-title">BzR Ordens de Serviço</div>
+      <div class="header-sub">Secretaria de Infraestrutura</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a class="btn-config" href="/os/dashboard.html" target="_blank" title="Dashboard OS" style="text-decoration:none">📊</a>
+    <a class="btn-config" href="/os/dashboard-waze.html" target="_blank" title="Buracos — Waze" style="text-decoration:none">🔴</a>
+    <button class="btn-config" onclick="toggleConfig()" title="Configurações">⚙️</button>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-item"><div class="stat-num" id="statTotal">–</div><div class="stat-label">Total</div></div>
+  <div class="stat-item"><div class="stat-num" id="statAbertas">–</div><div class="stat-label">Abertas</div></div>
+  <div class="stat-item"><div class="stat-num" id="statAndamento">–</div><div class="stat-label">Andamento</div></div>
+  <div class="stat-item"><div class="stat-num" id="statConcluidas">–</div><div class="stat-label">Concluídas</div></div>
+</div>
+
+<!-- NAV TABS -->
+<nav class="nav-tabs">
+  <button class="nav-tab active" onclick="showSection('lista')" id="tab-lista">📋 O.S.</button>
+  <button class="nav-tab" onclick="showSection('nova')" id="tab-nova">➕ Nova</button>
+  <button class="nav-tab" onclick="showSection('relatorio')" id="tab-relatorio">📊 Relatório</button>
+</nav>
+
+<!-- ═══ LISTA ═══ -->
+<div class="section active content" id="section-lista">
+  <div class="search-box">
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#9aa"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" placeholder="Buscar por nº, local, descrição..." oninput="filtrarOS(this.value)" id="buscaInput">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <select class="form-input" id="filtroBairro" onchange="setBairro(this.value)" style="padding:9px 28px 9px 12px;font-size:13px">
+      <option value="todos">🏘️ Todos os bairros</option>
+    </select>
+    <select class="form-input" id="filtroTag" onchange="setTag(this.value)" style="padding:9px 28px 9px 12px;font-size:13px">
+      <option value="todos">🏷️ Todas as tags</option>
+    </select>
+  </div>
+  <div class="filter-chips">
+    <div class="chip active" onclick="setFiltro('todos',this)">Todos</div>
+    <div class="chip" onclick="setFiltro('aberta',this)">🔵 Abertas</div>
+    <div class="chip" onclick="setFiltro('validada',this)">🟣 Validadas</div>
+    <div class="chip" onclick="setFiltro('andamento',this)">🟡 Andamento</div>
+    <div class="chip" onclick="setFiltro('concluida',this)">🟢 Concluídas</div>
+    <div class="chip" onclick="setFiltro('cancelada',this)">🔴 Canceladas</div>
+  </div>
+  <div id="listaOS">
+    <div class="loading"><div class="spinner"></div><p>Carregando ordens de serviço...</p></div>
+  </div>
+</div>
+
+<!-- ═══ NOVA O.S. ═══ -->
+<div class="section content" id="section-nova">
+  <div id="alertNova"></div>
+
+  <div class="form-card">
+    <div class="form-card-title">🗂️ Identificação</div>
+    <div class="form-group">
+      <label class="form-label">Nº da O.S.</label>
+      <input class="form-input" type="text" id="novaNumero" readonly>
+      <div style="font-size:11px;color:var(--cinza-texto);margin-top:4px">⚡ Gerado automaticamente</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tipo de Serviço <span class="req">*</span></label>
+      <select class="form-input" id="novaTipo">
+        <option value="">Selecione o tipo...</option>
+        <option>Pavimentação / Asfalto</option>
+        <option>Drenagem / Esgoto</option>
+        <option>Iluminação Pública</option>
+        <option>Limpeza Urbana</option>
+        <option>Manutenção de Praças</option>
+        <option>Bueiros / Bocas de Lobo</option>
+        <option>Calçadas / Passeios</option>
+        <option>Pontes / Viadutos</option>
+        <option>Sinalização Viária</option>
+        <option>Outros</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Descrição <span class="req">*</span></label>
+      <textarea class="form-input" id="novaDescricao" rows="3" placeholder="Descreva o serviço a ser realizado..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">🏷️ Tag / Origem</label>
+      <input class="form-input" type="text" id="novaTag" maxlength="40" list="tagSugestoes" placeholder="Ex.: Waze, Ouvidoria, 156... (opcional)">
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">📍 Localização</div>
+    <div class="form-group">
+      <label class="form-label">Endereço / Local <span class="req">*</span></label>
+      <input class="form-input" type="text" id="novaEndereco" placeholder="Rua, número">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bairro</label>
+      <input class="form-input" type="text" id="novaBairro" placeholder="Nome do bairro">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Ponto de Referência</label>
+      <input class="form-input" type="text" id="novaReferencia" placeholder="Próximo a... / Em frente ao...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">🧭 Coordenadas <span style="font-weight:400;color:var(--cinza-texto)">(opcional)</span></label>
+      <input class="form-input" type="text" id="novaCoordenadas" placeholder="-7.1195, -34.8450" inputmode="text">
+      <div style="font-size:11px;color:var(--cinza-texto);margin-top:4px">Se preenchidas, o botão do mapa abre o ponto exato em vez do endereço.</div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">👷 Execução</div>
+    <div class="form-group">
+      <label class="form-label">Solicitante <span class="req">*</span></label>
+      <input class="form-input" type="text" id="novaSolicitante" placeholder="Nome do solicitante">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Responsável Técnico</label>
+      <input class="form-input" type="text" id="novaResponsavel" list="respSugestoes" placeholder="Engenheiro / Fiscal">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Equipe / Empreiteira</label>
+      <input class="form-input" type="text" id="novaEquipe" list="eqSugestoes" placeholder="Nome da equipe ou empresa">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Prioridade <span class="req">*</span></label>
+        <select class="form-input" id="novaPrioridade">
+          <option value="baixa">🟢 Baixa</option>
+          <option value="media" selected>🟡 Média</option>
+          <option value="alta">🔴 Alta</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Prazo Previsto</label>
+        <input class="form-input" type="date" id="novaPrazo">
+      </div>
+    </div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">📷 Fotos de Abertura <span style="font-size:11px;font-weight:400;color:var(--cinza-texto)">(estado inicial)</span></div>
+    <p style="font-size:12px;color:var(--cinza-texto);margin-bottom:12px">Tire fotos do local antes do início do serviço ou escolha da galeria (até 10).</p>
+    <div class="foto-botoes" style="margin-top:0">
+      <div class="foto-upload-area" onclick="document.getElementById('inputFotoAberturaCam').click()">
+        <input type="file" id="inputFotoAberturaCam" accept="image/*" capture="environment" style="display:none" onchange="selecionarFoto(this,'abertura')">
+        <div class="foto-upload-icon">📷</div>
+        <div class="foto-upload-text">Tirar foto</div>
+      </div>
+      <div class="foto-upload-area" onclick="document.getElementById('inputFotoAberturaGal').click()">
+        <input type="file" id="inputFotoAberturaGal" accept="image/*" multiple style="display:none" onchange="selecionarFoto(this,'abertura')">
+        <div class="foto-upload-icon">🖼️</div>
+        <div class="foto-upload-text">Da galeria</div>
+      </div>
+    </div>
+    <div class="foto-upload-sub" style="text-align:center;margin-top:6px">JPG, PNG · comprimidas automaticamente</div>
+    <div id="previewFotoAbertura"></div>
+  </div>
+
+  <button class="btn btn-primary" onclick="salvarNovaOS()" id="btnSalvarNova" style="margin-bottom:24px">
+    ✅ Abrir Ordem de Serviço
+  </button>
+</div>
+
+<!-- ═══ RELATÓRIO ═══ -->
+<div class="section content" id="section-relatorio">
+  <a href="/os/dashboard.html" target="_blank" class="btn btn-primary" style="margin-bottom:12px;text-decoration:none">
+    📺 Abrir Dashboard completo
+  </a>
+  <a href="/os/dashboard-waze.html" target="_blank" class="btn btn-primary" style="margin-bottom:12px;text-decoration:none;background:#e07b1a;border-color:#c46b12">
+    🔴 Buracos na Pista — Waze
+  </a>
+  <div class="form-card">
+    <div class="form-card-title">📊 Resumo Geral</div>
+    <div id="relatorioConteudo">
+      <div class="loading"><div class="spinner"></div><p>Aguarde...</p></div>
+    </div>
+  </div>
+  <div class="form-card">
+    <div class="form-card-title">📤 Importar CSV <span style="font-size:11px;font-weight:400;color:var(--cinza-texto)">(ex.: dados de buracos)</span></div>
+    <p style="font-size:12px;color:var(--cinza-texto);margin-bottom:12px">
+      Selecione um arquivo CSV. As colunas são detectadas automaticamente
+      (endereço/rua, bairro, descrição, referência, solicitante, prioridade, data,
+      latitude/longitude ou coluna única de coordenadas...).
+      Sem a coluna de bairro, ele é preenchido pela coordenada (mapa de bairros de João Pessoa).
+      Cada linha vira uma O.S. aberta.
+    </p>
+    <div class="foto-upload-area" onclick="document.getElementById('inputCSV').click()">
+      <input type="file" id="inputCSV" accept=".csv,text/csv" style="display:none" onchange="selecionarCSV(this)">
+      <div class="foto-upload-icon">📄</div>
+      <div class="foto-upload-text">Toque para escolher o arquivo CSV</div>
+      <div class="foto-upload-sub">Separador vírgula ou ponto-e-vírgula · com cabeçalho</div>
+    </div>
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label class="form-label">🏷️ Tag de origem das O.S. importadas</label>
+      <input class="form-input" type="text" id="tagImportCSV" value="Waze" maxlength="40" list="tagSugestoes" onchange="reprocessarCSV()" placeholder="Ex.: Waze, Ouvidoria, 156...">
+      <datalist id="tagSugestoes">
+        <option value="Waze"><option value="Ouvidoria"><option value="156"><option value="Vistoria de campo"><option value="Defesa Civil">
+      </datalist>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Solicitante (padrão)</label>
+        <input class="form-input" type="text" id="solImportCSV" value="Alyne" maxlength="60" onchange="reprocessarCSV()" placeholder="Nome do solicitante">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Responsável (padrão)</label>
+        <input class="form-input" type="text" id="respImportCSV" value="Sandoval" maxlength="60" list="respSugestoes" onchange="reprocessarCSV()" placeholder="Responsável técnico">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Equipe (padrão)</label>
+        <input class="form-input" type="text" id="eqImportCSV" value="Fenix" maxlength="60" list="eqSugestoes" onchange="reprocessarCSV()" placeholder="Equipe / empreiteira">
+      </div>
+    </div>
+    <datalist id="respSugestoes"><option value="Sandoval"></datalist>
+    <datalist id="eqSugestoes"><option value="Fenix"></datalist>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="chkAgruparCSV" checked onchange="reprocessarCSV()" style="width:17px;height:17px;accent-color:var(--primaria)">
+      Agrupar linhas repetidas do mesmo endereço em uma única O.S. (recomendado)
+    </label>
+    <div id="importPreview" style="margin-top:12px"></div>
+    <button class="btn btn-primary" id="btnImportar" style="display:none;margin-top:10px" onclick="confirmarImportCSV()">✅ Importar ordens</button>
+  </div>
+  <div class="form-card">
+    <div class="form-card-title">📥 Exportar</div>
+    <div class="form-group">
+      <label class="form-label">Período</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <input class="form-input" type="date" id="relDe">
+        <input class="form-input" type="date" id="relAte">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="exportarCSV()">📥 Exportar CSV</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL DETALHES ═══ -->
+<div class="modal-overlay" id="modalDetalhes">
+  <div class="modal-header">
+    <button class="modal-back" onclick="fecharModal()">←</button>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:15px;font-family:monospace" id="modalNumero"></div>
+      <div style="font-size:12px;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="modalTipo"></div>
+    </div>
+    <div id="modalBadge"></div>
+  </div>
+  <div class="modal-body" id="modalCorpo"></div>
+</div>
+
+<!-- ═══ CONFIG PANEL ═══ -->
+<div class="config-panel" id="configPanel" onclick="closeConfigBg(event)">
+  <div class="config-sheet">
+    <div class="config-handle"></div>
+    <div class="config-title">⚙️ Configurações</div>
+    <div id="dbStatus" class="db-status disconnected">
+      <span class="db-dot"></span> Verificando conexão...
+    </div>
+    <button class="btn btn-secondary" onclick="testarConexao()" style="margin-bottom:16px">🔄 Testar Conexão com o Banco</button>
+    <div style="padding:12px;background:var(--azul-claro);border-radius:var(--radius-sm);font-size:12px;color:var(--azul);margin-bottom:16px">
+      ℹ️ Configure a variável <strong>DATABASE_URL</strong> no arquivo <strong>.env</strong> no servidor com a connection string do Neon Database.
+    </div>
+    <button class="btn btn-secondary" onclick="toggleConfig()" style="margin-top:12px">Fechar</button>
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fabNova" onclick="showSection('nova')" title="Nova O.S.">+</button>
+
+<script src="bairros-jp.js"></script>
+<script>
+// escapa texto para uso seguro em HTML
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const S = {
+  ordens: [],
+  filtro: 'todos',
+  bairroFiltro: 'todos',
+  tagFiltro: 'todos',
+  busca: '',
+  fotosAbertura: [],    // base64[] (novas O.S. aceitam várias fotos)
+  fotoConclusaoModal: null,
+  osAberta: null,       // OS carregada no modal
+  editandoInfo: false,  // modo de edição da seção Informações
+};
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  carregarOS();
+  buscarProximoNumero();
+  testarConexaoSilencioso();
+});
+
+// ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────────
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+  document.getElementById('fabNova').style.display = id === 'lista' ? 'flex' : 'none';
+  if (id === 'relatorio') renderRelatorio();
+  if (id === 'nova') { limparFormNova(); buscarProximoNumero(); }
+}
+
+// ── NÚMERO OS ─────────────────────────────────────────────────────────────────
+async function buscarProximoNumero() {
+  try {
+    const r = await fetch('/api/proximo-numero');
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById('novaNumero').value = d.numero;
+    }
+  } catch { /* fallback local */ }
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function carregarOS() {
+  const container = document.getElementById('listaOS');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
+  try {
+    const r = await fetch('/api/ordens');
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.erro || `Erro ${r.status}`);
+    }
+    S.ordens = await r.json();
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">⚠️</div>
+      <h3>Erro ao carregar</h3>
+      <p>${e.message}</p>
+      <button class="btn btn-primary" style="margin-top:16px;max-width:200px" onclick="carregarOS()">Tentar novamente</button>
+    </div>`;
+    atualizarStats();
+    return;
+  }
+  popularFiltroBairro();
+  renderLista();
+  atualizarStats();
+}
+
+async function carregarOSCompleta(id) {
+  try {
+    const r = await fetch(`/api/ordens/${id}`);
+    if (!r.ok) throw new Error();
+    return await r.json();
+  } catch {
+    return S.ordens.find(o => o.id === id) || null;
+  }
+}
+
+function carregarLocal() {
+  try { return JSON.parse(localStorage.getItem('os_dados') || '[]'); } catch { return []; }
+}
+function salvarLocal() {
+  localStorage.setItem('os_dados', JSON.stringify(S.ordens));
+}
+
+// ── FOTO COMPRESSÃO ───────────────────────────────────────────────────────────
+function comprimirImagem(file, maxWidth = 900) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const MAX_FOTOS_ABERTURA = 10;
+
+async function selecionarFoto(input, tipo) {
+  const files = [...input.files];
+  if (!files.length) return;
+
+  if (tipo === 'abertura') {
+    for (const f of files) {
+      if (S.fotosAbertura.length >= MAX_FOTOS_ABERTURA) {
+        toast(`⚠️ Máximo de ${MAX_FOTOS_ABERTURA} fotos de abertura.`, 3000);
+        break;
+      }
+      S.fotosAbertura.push(await comprimirImagem(f));
+    }
+    renderGridFotos('previewFotoAbertura', S.fotosAbertura, 'removerFotoNova', 'verFotoNova');
+  } else if (tipo === 'conclusao-modal') {
+    const b64 = await comprimirImagem(files[0]);
+    S.fotoConclusaoModal = b64;
+    renderPreviewFoto('previewFotoConclusaoModal', b64, () => {
+      S.fotoConclusaoModal = null;
+      renderPreviewFoto('previewFotoConclusaoModal', null);
+    });
+  }
+  input.value = '';
+}
+
+function renderGridFotos(containerId, fotos, removerFn, verFn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = fotos.length ? `<div class="fotos-grid">${fotos.map((f, i) => `
+    <div class="foto-thumb">
+      <img src="${f}" onclick="${verFn}(${i})" alt="Foto ${i + 1}">
+      ${removerFn ? `<button class="foto-remove-btn" onclick="${removerFn}(${i})">✕</button>` : ''}
+    </div>`).join('')}</div>` : '';
+}
+
+function verFotoNova(i) { if (S.fotosAbertura[i]) verFoto(S.fotosAbertura[i]); }
+function removerFotoNova(i) {
+  S.fotosAbertura.splice(i, 1);
+  renderGridFotos('previewFotoAbertura', S.fotosAbertura, 'removerFotoNova', 'verFotoNova');
+}
+
+function verFotoAbertura(i) {
+  const f = (S.osAberta?.fotosAbertura || [])[i];
+  if (f) verFoto(f);
+}
+
+async function removerFotoAbertura(i) {
+  const os = S.osAberta;
+  if (!os) return;
+  if (!confirm('Excluir esta foto de abertura? Esta ação não pode ser desfeita.')) return;
+  const fotos = [...(os.fotosAbertura || [])];
+  fotos.splice(i, 1);
+  await atualizarOS(os.id, {
+    status: os.status, responsavel: os.responsavel || '', equipe: os.equipe || '',
+    historico: os.historico || [], fotoAbertura: fotos,
+  });
+}
+
+async function removerFotoConclusao() {
+  const os = S.osAberta;
+  if (!os) return;
+  if (!confirm('Excluir a foto de conclusão? Esta ação não pode ser desfeita.')) return;
+  S.fotoConclusaoModal = null;
+  await atualizarOS(os.id, {
+    status: os.status, responsavel: os.responsavel || '', equipe: os.equipe || '',
+    historico: os.historico || [], fotoConclusao: null,
+  });
+}
+
+function renderPreviewFoto(containerId, src, onRemove) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!src) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="foto-preview-wrap">
+      <img class="foto-preview-img" src="${src}" alt="Foto" onclick="verFoto('${src}')">
+      <button class="foto-remove-btn" onclick="(${onRemove.toString()})()">✕</button>
+    </div>`;
+}
+
+// ── RENDER LISTA ──────────────────────────────────────────────────────────────
+function renderLista() {
+  const container = document.getElementById('listaOS');
+  let lista = S.ordens;
+  if (S.filtro !== 'todos') lista = lista.filter(o => o.status === S.filtro);
+  if (S.bairroFiltro !== 'todos') lista = lista.filter(o => (o.bairro||'').trim() === S.bairroFiltro);
+  if (S.tagFiltro !== 'todos') {
+    lista = S.tagFiltro === '__sem__'
+      ? lista.filter(o => !(o.tag||'').trim())
+      : lista.filter(o => (o.tag||'').trim() === S.tagFiltro);
+  }
+  if (S.busca.length > 1) {
+    const q = S.busca.toLowerCase();
+    lista = lista.filter(o =>
+      (o.numero||'').toLowerCase().includes(q) ||
+      (o.descricao||'').toLowerCase().includes(q) ||
+      (o.endereco||'').toLowerCase().includes(q) ||
+      (o.tipo||'').toLowerCase().includes(q) ||
+      (o.bairro||'').toLowerCase().includes(q)
+    );
+  }
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <h3>${S.ordens.length === 0 ? 'Nenhuma O.S. cadastrada' : 'Nenhum resultado'}</h3>
+      <p>${S.ordens.length === 0 ? 'Toque em + para abrir a primeira Ordem de Serviço' : 'Tente mudar os filtros ou a busca'}</p>
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = lista.map(os => `
+    <div class="os-card ${os.status}" onclick="abrirDetalhes('${os.id}')">
+      <div class="os-card-header">
+        <div>
+          <div class="os-numero">${os.numero}</div>
+          <div class="os-titulo">${(os.descricao||os.tipo||'').substring(0,65)}${(os.descricao||'').length>65?'...':''}</div>
+        </div>
+        <span class="os-badge badge-${os.status}">${labelStatus(os.status)}</span>
+      </div>
+      <div class="os-info-row">
+        <div class="os-info-item">📍 ${os.endereco||'–'}${os.bairro?', '+os.bairro:''}</div>
+        ${os.prazo?`<div class="os-info-item">📅 ${fmtData(os.prazo)}</div>`:''}
+        ${os.prioridade==='alta'?`<div class="os-info-item prio-alta">🔴 Urgente</div>`:''}
+      </div>
+      ${os.ocorrencias>1||os.tag?`<div class="os-info-row" style="margin-top:6px;gap:6px">
+        ${os.tag?`<span class="tag-pill">🏷️ ${os.tag}</span>`:''}
+        ${os.ocorrencias>1?`<span class="recorrente-pill">🔁 Recorrente · ${os.ocorrencias} ocorrências desde ${fmtData(os.primeiraOcorrencia||os.criadoEm)}</span>`:''}
+      </div>`:''}
+      <div class="os-info-row" style="margin-top:4px">
+        ${os.responsavel?`<div class="os-info-item">👷 ${os.responsavel}</div>`:''}
+        <div class="os-info-item">🕐 ${fmtDataHora(os.criadoEm)}</div>
+      </div>
+      <div class="os-fotos-row">
+        <div class="foto-pill ${os.temFotoAbertura?'tem':'nao'}">📷 Abertura ${os.temFotoAbertura?'✓':'–'}</div>
+        <div class="foto-pill ${os.temFotoConclusao?'tem':'nao'}">📸 Conclusão ${os.temFotoConclusao?'✓':'–'}</div>
+        ${urlMapa(os)?`<div class="foto-pill tem" style="margin-left:auto;background:var(--azul-claro);color:var(--azul)" onclick="abrirMapa('${os.id}', event)">🗺️ Mapa</div>`:''}
+      </div>
+    </div>`).join('');
+}
+
+// ── FILTROS ───────────────────────────────────────────────────────────────────
+function setFiltro(status, el) {
+  S.filtro = status;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderLista();
+}
+function setBairro(b) { S.bairroFiltro = b; renderLista(); }
+function setTag(t) { S.tagFiltro = t; renderLista(); }
+function filtrarOS(texto) { S.busca = texto; renderLista(); }
+
+function popularFiltroBairro() {
+  const sel = document.getElementById('filtroBairro');
+  if (sel) {
+    const bairros = [...new Set(S.ordens.map(o => (o.bairro||'').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt'));
+    if (!bairros.includes(S.bairroFiltro)) S.bairroFiltro = 'todos';
+    sel.innerHTML = '<option value="todos">🏘️ Todos os bairros</option>' +
+      bairros.map(b => `<option value="${b.replace(/"/g,'&quot;')}"${b===S.bairroFiltro?' selected':''}>${b}</option>`).join('');
+  }
+  const selTag = document.getElementById('filtroTag');
+  if (selTag) {
+    const tags = [...new Set(S.ordens.map(o => (o.tag||'').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt'));
+    const temSemTag = S.ordens.some(o => !(o.tag||'').trim());
+    if (S.tagFiltro !== '__sem__' && !tags.includes(S.tagFiltro)) S.tagFiltro = 'todos';
+    selTag.innerHTML = '<option value="todos">🏷️ Todas as tags</option>' +
+      tags.map(t => `<option value="${t.replace(/"/g,'&quot;')}"${t===S.tagFiltro?' selected':''}>🏷️ ${t}</option>`).join('') +
+      (tags.length && temSemTag ? `<option value="__sem__"${S.tagFiltro==='__sem__'?' selected':''}>(sem tag)</option>` : '');
+  }
+}
+
+// ── MAPA ──────────────────────────────────────────────────────────────────────
+function urlMapa(os) {
+  // usa coordenadas se a referência tiver (import com lat/long); senão, endereço
+  const m = (os.referencia||'').match(/Coordenadas:\s*(-?\d+(?:\.\d+)?)[,;]\s*(-?\d+(?:\.\d+)?)/i);
+  const q = m ? `${m[1]},${m[2]}` : [os.endereco, os.bairro].filter(Boolean).join(', ');
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : null;
+}
+function abrirMapa(id, ev) {
+  if (ev) ev.stopPropagation();
+  const os = S.ordens.find(o => o.id === id) || S.osAberta;
+  const u = os && urlMapa(os);
+  if (u) window.open(u, '_blank');
+  else toast('⚠️ O.S. sem endereço para localizar.');
+}
+
+// ── STATS ─────────────────────────────────────────────────────────────────────
+function atualizarStats() {
+  const c = s => S.ordens.filter(o => o.status === s).length;
+  document.getElementById('statTotal').textContent = S.ordens.length;
+  document.getElementById('statAbertas').textContent = c('aberta');
+  document.getElementById('statAndamento').textContent = c('andamento');
+  document.getElementById('statConcluidas').textContent = c('concluida');
+}
+
+// ── NOVA OS ───────────────────────────────────────────────────────────────────
+async function salvarNovaOS() {
+  const v = id => document.getElementById(id).value.trim();
+  const tipo = v('novaTipo'), descricao = v('novaDescricao');
+  const endereco = v('novaEndereco'), solicitante = v('novaSolicitante');
+
+  const alertEl = document.getElementById('alertNova');
+  if (!tipo || !descricao || !endereco || !solicitante) {
+    alertEl.innerHTML = `<div class="alert alert-error">⚠️ Preencha os campos obrigatórios: Tipo, Descrição, Endereço e Solicitante.</div>`;
+    alertEl.scrollIntoView({ behavior:'smooth' });
+    return;
+  }
+
+  const coordTxt = v('novaCoordenadas');
+  const coord = coordTxt ? parseCoordenadas(coordTxt) : null;
+  if (coordTxt && !coord) {
+    alertEl.innerHTML = `<div class="alert alert-error">⚠️ Coordenadas inválidas. Use o formato: -7.1195, -34.8450</div>`;
+    alertEl.scrollIntoView({ behavior:'smooth' });
+    return;
+  }
+  let referencia = v('novaReferencia');
+  if (coord) referencia = (referencia ? referencia + ' · ' : '') + `Coordenadas: ${coord.lat}, ${coord.lng}`;
+
+  const btn = document.getElementById('btnSalvarNova');
+  btn.disabled = true;
+  btn.textContent = '⏳ Salvando...';
+
+  const os = {
+    tipo, descricao, endereco,
+    bairro: v('novaBairro'),
+    referencia,
+    solicitante,
+    responsavel: v('novaResponsavel'),
+    equipe: v('novaEquipe'),
+    prioridade: v('novaPrioridade'),
+    prazo: v('novaPrazo') || null,
+    tag: v('novaTag'),
+    fotoAbertura: S.fotosAbertura,
+  };
+
+  try {
+    const r = await fetch('/api/ordens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(os),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.erro || `Erro ${r.status}`);
+    S.ordens.unshift({ ...data, fotoAbertura: undefined, fotosAbertura: undefined, fotoConclusao: undefined });
+    alertEl.innerHTML = `<div class="alert alert-success">✅ O.S. ${data.numero} aberta com sucesso!</div>`;
+    atualizarStats();
+    setTimeout(() => { showSection('lista'); renderLista(); }, 1200);
+  } catch (e) {
+    alertEl.innerHTML = `<div class="alert alert-error">❌ Erro ao salvar no banco: ${e.message}</div>`;
+    alertEl.scrollIntoView({ behavior:'smooth' });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ Abrir Ordem de Serviço';
+  }
+}
+
+function limparFormNova() {
+  ['novaTipo','novaDescricao','novaEndereco','novaBairro','novaReferencia',
+   'novaSolicitante','novaResponsavel','novaEquipe','novaPrazo','novaTag','novaCoordenadas'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('novaPrioridade').value = 'media';
+  S.fotosAbertura = [];
+  document.getElementById('previewFotoAbertura').innerHTML = '';
+  document.getElementById('alertNova').innerHTML = '';
+}
+
+// ── DETALHES OS ───────────────────────────────────────────────────────────────
+async function abrirDetalhes(id) {
+  const overlay = document.getElementById('modalDetalhes');
+  overlay.classList.add('open');
+  overlay.scrollTop = 0;
+  document.getElementById('modalCorpo').innerHTML = '<div class="loading"><div class="spinner"></div><p>Carregando...</p></div>';
+
+  const os = await carregarOSCompleta(id);
+  if (!os) { fecharModal(); return; }
+  S.osAberta = os;
+  S.fotoConclusaoModal = null;
+  S.editandoInfo = false;
+
+  document.getElementById('modalNumero').textContent = os.numero;
+  document.getElementById('modalTipo').textContent = os.tipo || '';
+  document.getElementById('modalBadge').innerHTML = `<span class="os-badge badge-${os.status}">${labelStatus(os.status)}</span>`;
+
+  const finalizada = os.status === 'concluida' || os.status === 'cancelada';
+  // foto de conclusão só fica ativa depois que o buraco for validado
+  const conclusaoLiberada = !finalizada && os.status !== 'aberta';
+
+  document.getElementById('modalCorpo').innerHTML = `
+    <!-- INFO -->
+    <div class="form-card">
+      <div id="cardInfo">${renderInfoCard(os)}</div>
+      ${urlMapa(os)?`<button class="btn btn-secondary" style="margin-top:14px" onclick="abrirMapa('${os.id}')">🗺️ Ver localização no mapa</button>`:''}
+      <button class="btn btn-secondary" style="margin-top:8px" onclick="imprimirOS()">🖨️ Imprimir O.S.</button>
+    </div>
+
+    <!-- FOTOS ABERTURA -->
+    <div class="form-card">
+      <div class="form-card-title">📷 Fotos de Abertura${(os.fotosAbertura||[]).length ? ` <span style="font-size:11px;font-weight:400;color:var(--cinza-texto)">(${os.fotosAbertura.length})</span>` : ''}</div>
+      ${(os.fotosAbertura||[]).length
+        ? `<div class="fotos-grid" style="margin-top:0">${os.fotosAbertura.map((f, i) => `
+            <div class="foto-thumb">
+              <img src="${f}" onclick="verFotoAbertura(${i})" alt="Foto abertura ${i + 1}">
+              ${!finalizada ? `<button class="foto-remove-btn" onclick="removerFotoAbertura(${i})">✕</button>` : ''}
+            </div>`).join('')}</div>`
+        : `<div style="text-align:center;padding:24px;color:var(--cinza-texto)">
+            <div style="font-size:36px;margin-bottom:8px">📷</div>
+            <p style="font-size:13px">Nenhuma foto de abertura registrada.</p>
+           </div>`}
+      ${!finalizada ? `
+        <div class="foto-botoes">
+          <div class="foto-upload-area" onclick="document.getElementById('inputAddAberturaCam').click()">
+            <input type="file" id="inputAddAberturaCam" accept="image/*" capture="environment" style="display:none" onchange="adicionarFotoNaOS(this,'abertura')">
+            <div class="foto-upload-text">📷 Tirar foto</div>
+          </div>
+          <div class="foto-upload-area" onclick="document.getElementById('inputAddAberturaGal').click()">
+            <input type="file" id="inputAddAberturaGal" accept="image/*" multiple style="display:none" onchange="adicionarFotoNaOS(this,'abertura')">
+            <div class="foto-upload-text">🖼️ Da galeria</div>
+          </div>
+        </div>` : ''}
+    </div>
+
+    <!-- FOTO CONCLUSÃO -->
+    <div class="form-card">
+      <div class="form-card-title">📸 Foto de Conclusão</div>
+      ${os.fotoConclusao
+        ? `<div style="position:relative">
+            <img src="${os.fotoConclusao}" style="width:100%;border-radius:var(--radius-sm);cursor:pointer;max-height:260px;object-fit:cover" onclick="verFoto('${os.fotoConclusao}')" alt="Foto conclusão">
+            ${conclusaoLiberada ? `<button class="foto-remove-btn" onclick="removerFotoConclusao()" title="Excluir foto de conclusão">✕</button>` : ''}
+           </div>`
+        : `<div style="text-align:center;padding:24px;color:var(--cinza-texto)">
+            <div style="font-size:36px;margin-bottom:8px">📸</div>
+            <p style="font-size:13px">Nenhuma foto de conclusão ainda.</p>
+           </div>`}
+      ${finalizada ? '' : (conclusaoLiberada ? `
+        <div style="font-size:12px;color:var(--cinza-texto);text-align:center;margin-top:8px">${os.fotoConclusao ? '🔄 Substituir foto de conclusão:' : 'Adicionar foto de conclusão / depois:'}</div>
+        <div class="foto-botoes" style="margin-top:6px">
+          <div class="foto-upload-area" onclick="document.getElementById('inputAddConclusaoCam').click()">
+            <input type="file" id="inputAddConclusaoCam" accept="image/*" capture="environment" style="display:none" onchange="adicionarFotoNaOS(this,'conclusao')">
+            <div class="foto-upload-text">📷 Tirar foto</div>
+          </div>
+          <div class="foto-upload-area" onclick="document.getElementById('inputAddConclusaoGal').click()">
+            <input type="file" id="inputAddConclusaoGal" accept="image/*" style="display:none" onchange="adicionarFotoNaOS(this,'conclusao')">
+            <div class="foto-upload-text">🖼️ Da galeria</div>
+          </div>
+        </div>
+        <div id="previewFotoConclusaoModal"></div>` : `
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;text-align:center;margin-top:10px;padding:14px;background:var(--cinza-fundo,#f4f5f7);border:1px dashed var(--cinza-borda);border-radius:var(--radius-sm);color:var(--cinza-texto);font-size:13px">
+          🔒 Disponível somente após o buraco ser validado.
+        </div>`)}
+    </div>
+
+    <!-- OBS -->
+    ${!finalizada ? `
+    <div class="form-card">
+      <div class="form-card-title">📝 Registrar Observação</div>
+      <textarea class="form-input" id="novaObs" rows="3" placeholder="Observação ou atualização..."></textarea>
+      <button class="btn btn-secondary" style="margin-top:8px" onclick="adicionarObs()">📝 Salvar Observação</button>
+    </div>` : ''}
+
+    <!-- HISTÓRICO -->
+    <div class="form-card">
+      <div class="form-card-title">🕐 Histórico</div>
+      <div class="timeline">
+        ${(os.historico||[]).slice().reverse().map(h => `
+          <div class="timeline-item">
+            <div class="timeline-dot" style="background:${corStatus(h.status)}">${iconStatus(h.status)}</div>
+            <div class="timeline-body">
+              <div class="timeline-title">${labelStatus(h.status)}</div>
+              <div class="timeline-time">${fmtDataHora(h.data)}</div>
+              ${h.obs?`<div class="timeline-obs">${h.obs}</div>`:''}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- AÇÕES -->
+    ${!finalizada ? `
+    <div class="form-card">
+      <div class="form-card-title">⚡ Alterar Status</div>
+      <div class="btn-row">
+        ${os.status==='aberta'?`<button class="btn btn-primary" onclick="mudarStatus('validada')">✔️ Validar O.S.</button>`:''}
+        ${os.status==='validada'?`<button class="btn btn-warning" onclick="mudarStatus('andamento')">🔧 Iniciar Atendimento</button>`:''}
+        ${os.status==='andamento'?`<button class="btn btn-success" onclick="mudarStatus('concluida')">✅ Concluir O.S.</button>`:''}
+        <button class="btn btn-danger" onclick="mudarStatus('cancelada')">❌ Cancelar</button>
+      </div>
+    </div>` : `
+    <div class="form-card">
+      <div style="text-align:center;padding:8px;color:var(--cinza-texto);font-size:13px">
+        ${os.status==='concluida'?'✅ Esta O.S. foi concluída.':'❌ Esta O.S. foi cancelada.'}
+      </div>
+    </div>`}
+
+    <!-- EXCLUIR -->
+    <div style="text-align:center;margin-top:4px">
+      <button onclick="excluirOS()" style="background:none;border:none;color:var(--vermelho);font-size:12px;cursor:pointer;padding:8px">
+        🗑️ Excluir esta O.S.
+      </button>
+    </div>
+    <div style="height:8px"></div>
+  `;
+}
+
+function fecharModal() {
+  document.getElementById('modalDetalhes').classList.remove('open');
+  S.osAberta = null;
+  S.fotoConclusaoModal = null;
+  carregarOS();
+}
+
+// ── AÇÕES ─────────────────────────────────────────────────────────────────────
+
+// GPS do aparelho (requer HTTPS e permissão do usuário)
+function capturarGPS() {
+  return new Promise(resolve => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        lat: +pos.coords.latitude.toFixed(6),
+        lng: +pos.coords.longitude.toFixed(6),
+        acc: Math.round(pos.coords.accuracy || 0),
+      }),
+      () => resolve(null), // negado / indisponível: segue sem GPS
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  });
+}
+
+// troca (ou acrescenta) o trecho "Coordenadas: lat, lng" da referência
+function aplicarCoordenadas(referencia, gps) {
+  const trecho = `Coordenadas: ${gps.lat}, ${gps.lng}`;
+  const re = /Coordenadas:\s*-?\d+(?:\.\d+)?\s*[,;]\s*-?\d+(?:\.\d+)?/i;
+  if (re.test(referencia || '')) return referencia.replace(re, trecho);
+  return (referencia ? referencia + ' · ' : '') + trecho;
+}
+
+async function mudarStatus(novoStatus) {
+  const os = S.osAberta;
+  if (!os) return;
+
+  if (novoStatus === 'concluida' && !os.fotoConclusao && !S.fotoConclusaoModal) {
+    toast('⚠️ Adicione a foto de conclusão antes de concluir a O.S.', 3000);
+    return;
+  }
+
+  const obsMap = { validada:'O.S. validada', andamento:'Atendimento iniciado', concluida:'Serviço concluído', cancelada:'O.S. cancelada' };
+  let obs = obsMap[novoStatus];
+
+  // na validação, quem valida está no local: atualiza as coordenadas pelo GPS
+  let referencia;
+  if (novoStatus === 'validada') {
+    toast('📡 Obtendo localização do aparelho...', 9000);
+    const gps = await capturarGPS();
+    if (gps) {
+      referencia = aplicarCoordenadas(os.referencia || '', gps);
+      obs += ` — localização confirmada pelo GPS (${gps.lat}, ${gps.lng}${gps.acc ? `, ±${gps.acc} m` : ''})`;
+      toast('📍 Coordenadas atualizadas pela localização do aparelho!');
+    } else {
+      toast('⚠️ GPS indisponível — validada sem atualizar a localização.', 3000);
+    }
+  }
+
+  const historico = [...(os.historico||[]), { status: novoStatus, data: new Date().toISOString(), obs }];
+
+  const body = {
+    status: novoStatus,
+    responsavel: os.responsavel || '',
+    equipe: os.equipe || '',
+    historico,
+    fotoConclusao: S.fotoConclusaoModal || os.fotoConclusao || null,
+    ...(referencia !== undefined && { referencia }),
+    ...(novoStatus === 'concluida' && { concluidoEm: new Date().toISOString() }),
+  };
+
+  await atualizarOS(os.id, body);
+}
+
+async function adicionarObs() {
+  const os = S.osAberta;
+  if (!os) return;
+  const obs = (document.getElementById('novaObs')||{}).value?.trim();
+  if (!obs) return;
+  const historico = [...(os.historico||[]), { status: os.status, data: new Date().toISOString(), obs }];
+  await atualizarOS(os.id, { status: os.status, responsavel: os.responsavel||'', equipe: os.equipe||'', historico });
+}
+
+async function adicionarFotoNaOS(input, tipo) {
+  const os = S.osAberta;
+  const files = [...input.files];
+  if (!os || !files.length) return;
+
+  if (tipo === 'conclusao') {
+    const b64 = await comprimirImagem(files[0]);
+    input.value = '';
+    S.fotoConclusaoModal = b64;
+    renderPreviewFoto('previewFotoConclusaoModal', b64, () => {
+      S.fotoConclusaoModal = null;
+      renderPreviewFoto('previewFotoConclusaoModal', null);
+    });
+    toast('📸 Foto carregada. Salve alterando o status ou registre uma observação.');
+    return;
+  }
+
+  // abertura: acrescenta às fotos existentes
+  const fotos = [...(os.fotosAbertura || [])];
+  for (const f of files) {
+    if (fotos.length >= MAX_FOTOS_ABERTURA) {
+      toast(`⚠️ Máximo de ${MAX_FOTOS_ABERTURA} fotos de abertura.`, 3000);
+      break;
+    }
+    fotos.push(await comprimirImagem(f));
+  }
+  input.value = '';
+  await atualizarOS(os.id, {
+    status: os.status,
+    responsavel: os.responsavel||'',
+    equipe: os.equipe||'',
+    historico: os.historico||[],
+    fotoAbertura: fotos,
+  });
+}
+
+async function atualizarOS(id, body) {
+  try {
+    const r = await fetch(`/api/ordens/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error();
+    const updated = await r.json();
+    const idx = S.ordens.findIndex(o => o.id === id);
+    if (idx >= 0) S.ordens[idx] = { ...S.ordens[idx], ...updated, fotoAbertura: undefined, fotosAbertura: undefined, fotoConclusao: undefined };
+    salvarLocal();
+    atualizarStats();
+    toast('✅ Atualizado com sucesso!');
+    await abrirDetalhes(id);
+  } catch (e) {
+    toast('❌ Erro ao salvar. Verifique a conexão.', 3000);
+  }
+}
+
+async function excluirOS() {
+  if (!confirm('Excluir esta O.S.? Esta ação não pode ser desfeita.')) return;
+  const id = S.osAberta?.id;
+  if (!id) return;
+  try {
+    await fetch(`/api/ordens/${id}`, { method: 'DELETE' });
+  } catch {}
+  S.ordens = S.ordens.filter(o => o.id !== id);
+  salvarLocal();
+  fecharModal();
+  toast('🗑️ O.S. excluída.');
+}
+
+// ── IMPRESSÃO ─────────────────────────────────────────────────────────────────
+function imprimirOS() {
+  const os = S.osAberta;
+  if (!os) return;
+  const e = s => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+  const badges = {
+    aberta:    ['#e8f0fa', '#1a6eb4', '#b3cfe8', '📋 Aberta'],
+    validada:  ['#f0e9fb', '#6a3fb5', '#c9b3ec', '✔ Validada'],
+    andamento: ['#fff8e6', '#e07b1a', '#f5d9a0', '🔧 Em Andamento'],
+    concluida: ['#e8f5ee', '#1a6e45', '#a8d5b8', '✅ Concluída'],
+    cancelada: ['#fdecea', '#d32f2f', '#f3b6b1', '❌ Cancelada'],
+  };
+  const [bgB, corB, bordaB, lblB] = badges[os.status] || badges.aberta;
+  const prios = {
+    alta:  ['#fdecea', '#d32f2f', '#f3b6b1', '🔴 Prioridade Alta'],
+    media: ['#fff8e6', '#e07b1a', '#f5d9a0', '🟡 Prioridade Média'],
+    baixa: ['#e8f5ee', '#1a6e45', '#a8d5b8', '🟢 Prioridade Baixa'],
+  };
+  const [bgP, corP, bordaP, lblP] = prios[os.prioridade] || prios.media;
+
+  const foto = (titulo, src, vazio) => `
+    <div class="foto-bloco">
+      <div class="foto-titulo">📷 ${titulo}</div>
+      ${src ? `<img src="${src}" alt="${titulo}">` : `<div class="foto-vazia">${vazio}</div>`}
+    </div>`;
+
+  const historico = (os.historico || []).map(h => `
+    <tr><td>${fmtDataHora(h.data)}</td><td class="st">${iconStatus(h.status)} ${labelStatus(h.status)}</td><td>${e(h.obs || '')}</td></tr>`).join('');
+
+  // observações registradas manualmente (exclui as mensagens automáticas de status)
+  const ehObsAutomatica = t => /^(Alyne|O\.S\. validada|Atendimento iniciado|Serviço concluído|O\.S\. cancelada)/i.test(t || '');
+  const observacoes = (os.historico || []).filter(h => h.obs && !ehObsAutomatica(h.obs));
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>${e(os.numero)} — Impressão</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color: #0A0F0C; background: #fff; padding: 12mm 14mm;
+  font-size: 11px; line-height: 1.45;
+}
+@page { size: A4; margin: 0; }
+.cabecalho {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 3px solid #1FBF63; padding-bottom: 10px; margin-bottom: 12px;
+}
+.cab-esq { display: flex; align-items: center; gap: 10px; }
+.logo {
+  width: 46px; height: 46px; background: #0A0F0C; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 24px;
+}
+.orgao { font-size: 13px; font-weight: 800; letter-spacing: 0.3px; }
+.orgao-sub { font-size: 10.5px; color: #5a6473; }
+.titulo-doc { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #5a6473; text-align: right; }
+.numero-os { font-size: 21px; font-weight: 800; font-family: 'Consolas', monospace; color: #1FBF63; }
+.faixa { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; }
+.badge {
+  display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.6px; padding: 4px 14px; border-radius: 20px; border: 1.5px solid;
+}
+.pill { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid; }
+.secao { margin-bottom: 11px; }
+.secao-titulo {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+  color: #008036; border-bottom: 1.5px solid #d8dde3; padding-bottom: 3px; margin-bottom: 6px;
+}
+.grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 14px; }
+.campo .rotulo { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #5a6473; }
+.campo .valor { font-size: 11.5px; font-weight: 600; }
+.descricao-box {
+  border: 1px solid #d8dde3; border-left: 3px solid #1FBF63;
+  border-radius: 6px; padding: 8px 10px; font-size: 11.5px; min-height: 44px;
+}
+.obs-item {
+  border: 1px solid #d8dde3; border-left: 3px solid #e07b1a;
+  border-radius: 6px; padding: 7px 10px; font-size: 11px; margin-bottom: 6px;
+}
+.obs-item .obs-data { font-weight: 700; color: #5a6473; font-size: 9.5px; }
+.fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.foto-bloco { border: 1px solid #d8dde3; border-radius: 8px; overflow: hidden; page-break-inside: avoid; }
+.foto-bloco .foto-titulo {
+  font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px;
+  padding: 5px 9px; background: #f4f5f7; color: #5a6473; border-bottom: 1px solid #d8dde3;
+}
+.foto-bloco img { width: 100%; height: 58mm; object-fit: cover; display: block; }
+.foto-vazia {
+  height: 58mm; display: flex; align-items: center; justify-content: center;
+  color: #aab2bc; font-size: 11px; background: #fafbfc;
+}
+table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+th {
+  text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: #5a6473; padding: 4px 8px; border-bottom: 1.5px solid #d8dde3;
+}
+td { padding: 5px 8px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
+td.st { font-weight: 700; white-space: nowrap; }
+.assinaturas {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px;
+  margin-top: 26px; page-break-inside: avoid;
+}
+.ass { text-align: center; }
+.ass .linha { border-top: 1px solid #0A0F0C; margin-bottom: 4px; margin-top: 28px; }
+.ass .nome { font-size: 10px; font-weight: 700; }
+.ass .cargo { font-size: 9px; color: #5a6473; }
+.rodape {
+  margin-top: 14px; padding-top: 7px; border-top: 1px solid #d8dde3;
+  display: flex; justify-content: space-between; font-size: 8.5px; color: #5a6473;
+}
+</style>
+</head>
+<body>
+<header class="cabecalho">
+  <div class="cab-esq">
+    <div class="logo">🏗️</div>
+    <div>
+      <div class="orgao">PREFEITURA MUNICIPAL DE JOÃO PESSOA</div>
+      <div class="orgao-sub">Secretaria de Infraestrutura — Gestão de Ordens de Serviço</div>
+    </div>
+  </div>
+  <div>
+    <div class="titulo-doc">ORDEM DE SERVIÇO</div>
+    <div class="numero-os">${e(os.numero)}</div>
+  </div>
+</header>
+
+<div class="faixa">
+  <span class="badge" style="background:${bgB};color:${corB};border-color:${bordaB}">${lblB}</span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <span class="pill" style="background:${bgP};color:${corP};border-color:${bordaP}">${lblP}</span>
+    ${os.tag ? `<span class="pill" style="background:#efe8fa;color:#6a3fb5;border-color:#d8c8f2">🏷️ ${e(os.tag)}</span>` : ''}
+    ${os.ocorrencias > 1 ? `<span class="pill" style="background:#fff3e0;color:#e07b1a;border-color:#f5cf9b">🔁 Recorrente — ${os.ocorrencias}x desde ${fmtData(os.primeiraOcorrencia || os.criadoEm)}</span>` : ''}
+  </div>
+</div>
+
+<div class="secao">
+  <div class="secao-titulo">Dados da Ordem de Serviço</div>
+  <div class="grade">
+    <div class="campo"><div class="rotulo">Tipo de serviço</div><div class="valor">${e(os.tipo) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">Aberta em</div><div class="valor">${fmtDataHora(os.criadoEm) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">${os.concluidoEm ? 'Concluída em' : 'Prazo de execução'}</div><div class="valor">${os.concluidoEm ? fmtDataHora(os.concluidoEm) : (os.prazo ? fmtData(os.prazo) : '–')}</div></div>
+  </div>
+</div>
+
+<div class="secao">
+  <div class="secao-titulo">Localização</div>
+  <div class="grade">
+    <div class="campo"><div class="rotulo">Endereço</div><div class="valor">${e(os.endereco) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">Bairro</div><div class="valor">${e(os.bairro) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">Ponto de referência</div><div class="valor">${e(os.referencia) || '–'}</div></div>
+  </div>
+</div>
+
+<div class="secao">
+  <div class="secao-titulo">Solicitação e Execução</div>
+  <div class="grade">
+    <div class="campo"><div class="rotulo">Solicitante</div><div class="valor">${e(os.solicitante) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">Responsável técnico</div><div class="valor">${e(os.responsavel) || '–'}</div></div>
+    <div class="campo"><div class="rotulo">Equipe / Empreiteira</div><div class="valor">${e(os.equipe) || '–'}</div></div>
+  </div>
+</div>
+
+<div class="secao">
+  <div class="secao-titulo">Descrição do Serviço</div>
+  <div class="descricao-box">${e(os.descricao) || 'Sem descrição registrada.'}</div>
+</div>
+
+${observacoes.length ? `
+<div class="secao">
+  <div class="secao-titulo">📝 Observações (${observacoes.length})</div>
+  ${observacoes.map(h => `<div class="obs-item"><span class="obs-data">${fmtDataHora(h.data)}</span> — ${e(h.obs)}</div>`).join('')}
+</div>` : ''}
+
+<div class="secao">
+  <div class="secao-titulo">Registro Fotográfico</div>
+  <div class="fotos">
+    ${(os.fotosAbertura && os.fotosAbertura.length
+        ? os.fotosAbertura.map((f, i) => foto(`Foto de abertura${os.fotosAbertura.length > 1 ? ` ${i + 1} de ${os.fotosAbertura.length}` : ''}`, f, '')).join('')
+        : foto('Foto de abertura', null, 'Sem foto de abertura registrada'))}
+    ${foto('Foto de conclusão', os.fotoConclusao, 'Sem foto de conclusão registrada')}
+  </div>
+</div>
+
+<div class="secao">
+  <div class="secao-titulo">Histórico da O.S.</div>
+  <table>
+    <tr><th style="width:110px">Data / Hora</th><th style="width:115px">Status</th><th>Observação</th></tr>
+    ${historico || '<tr><td colspan="3">Sem registros.</td></tr>'}
+  </table>
+</div>
+
+<div class="assinaturas">
+  <div class="ass"><div class="linha"></div><div class="nome">Responsável Técnico</div><div class="cargo">${e(os.responsavel) || '&nbsp;'}</div></div>
+  <div class="ass"><div class="linha"></div><div class="nome">Executante</div><div class="cargo">${e(os.equipe) || '&nbsp;'}</div></div>
+  <div class="ass"><div class="linha"></div><div class="nome">Fiscalização</div><div class="cargo">Secretaria de Infraestrutura</div></div>
+</div>
+
+<div class="rodape">
+  <span>Documento gerado pelo Sistema de Gestão de O.S. — Secretaria de Infraestrutura</span>
+  <span>Impresso em ${fmtDataHora(new Date().toISOString())}</span>
+</div>
+<scr` + `ipt>window.onload = () => setTimeout(() => window.print(), 250);</scr` + `ipt>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { toast('⚠️ Permita pop-ups para imprimir a O.S.', 3000); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
+// ── FOTO GRANDE ───────────────────────────────────────────────────────────────
+function verFoto(src) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${src}" alt="Foto"><button class="lightbox-close" onclick="this.parentElement.remove()">✕</button>`;
+  lb.onclick = e => { if (e.target === lb) lb.remove(); };
+  document.body.appendChild(lb);
+}
+
+// ── RELATÓRIO ─────────────────────────────────────────────────────────────────
+function renderRelatorio() {
+  const el = document.getElementById('relatorioConteudo');
+  const total = S.ordens.length;
+  if (!total) { el.innerHTML = '<p style="color:var(--cinza-texto);font-size:13px">Nenhuma O.S. cadastrada.</p>'; return; }
+  const c = s => S.ordens.filter(o => o.status === s).length;
+  const pct = v => `<div style="height:7px;background:var(--cinza-bg);border-radius:4px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${Math.round(v/total*100)}%;background:var(--primaria);border-radius:4px"></div></div>`;
+
+  const porTipo = {};
+  S.ordens.forEach(o => { porTipo[o.tipo||'Outros'] = (porTipo[o.tipo||'Outros']||0)+1; });
+  const tops = Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      ${[['aberta','Abertas',c('aberta'),'var(--azul)','var(--azul-claro)'],
+         ['validada','Validadas',c('validada'),'#6a3fb5','#f0e9fb'],
+         ['andamento','Andamento',c('andamento'),'var(--laranja)','#fff8e6'],
+         ['concluida','Concluídas',c('concluida'),'var(--verde)','var(--verde-claro)'],
+         ['cancelada','Canceladas',c('cancelada'),'var(--vermelho)','var(--vermelho-claro)']
+        ].map(([,lbl,n,cor,bg]) => `
+        <div style="background:${bg};border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:26px;font-weight:700;color:${cor}">${n}</div>
+          <div style="font-size:11px;color:${cor};font-weight:700;text-transform:uppercase">${lbl}</div>
+        </div>`).join('')}
+    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px">Por tipo de serviço</div>
+    ${tops.map(([tipo,qtd]) => `
+      <div style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span>${tipo}</span><span style="font-weight:700">${qtd}</span>
+        </div>
+        ${pct(qtd)}
+      </div>`).join('')}
+    <div style="margin-top:14px;font-size:12px;color:var(--cinza-texto)">
+      <strong>Taxa de conclusão:</strong> ${total?Math.round(c('concluida')/total*100):0}%
+    </div>
+  `;
+}
+
+// ── IMPORTAR CSV ──────────────────────────────────────────────────────────────
+let csvOrdensParaImportar = [];
+
+function parseCSV(texto) {
+  texto = texto.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  // detecta separador pela 1ª linha: o que aparecer mais vezes fora de aspas
+  const primeira = texto.split('\n')[0] || '';
+  const conta = sep => (primeira.match(new RegExp(`\\${sep}`, 'g')) || []).length;
+  const sep = conta(';') > conta(',') ? ';' : ',';
+
+  const linhas = [];
+  let linha = [], campo = '', aspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (aspas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; }
+        else aspas = false;
+      } else campo += c;
+    } else if (c === '"') aspas = true;
+    else if (c === sep) { linha.push(campo); campo = ''; }
+    else if (c === '\n') { linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+    else campo += c;
+  }
+  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas.filter(l => l.some(v => v.trim() !== ''));
+}
+
+function normalizarCabecalho(h) {
+  return h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// sinônimos aceitos para cada campo da O.S. (em ordem de prioridade)
+const MAPA_COLUNAS = {
+  endereco:    ['endereco', 'rua', 'logradouro', 'street', 'local', 'via', 'address', 'localizacao'],
+  bairro:      ['bairro', 'distrito', 'regiao', 'cidade', 'city', 'municipio'],
+  referencia:  ['referencia', 'ponto_de_referencia', 'ponto_referencia', 'proximidade', 'observacao_local'],
+  descricao:   ['descricao', 'observacao', 'observacoes', 'obs', 'problema', 'detalhes', 'ocorrencia'],
+  solicitante: ['solicitante', 'requerente', 'cidadao', 'nome', 'autor'],
+  responsavel: ['responsavel', 'fiscal', 'engenheiro'],
+  equipe:      ['equipe', 'empreiteira', 'empresa'],
+  prioridade:  ['prioridade', 'urgencia', 'severidade', 'gravidade'],
+  prazo:       ['prazo', 'data_prazo', 'previsao', 'data_previsao'],
+  tipo:        ['subtipo', 'subtype', 'tipo', 'tipo_servico', 'tipo_de_servico', 'servico', 'categoria', 'type'],
+  quantidade:  ['record_count', 'qtd_registros', 'ocorrencias', 'quantidade', 'qtd', 'registros', 'contagem'],
+  criadoEm:    ['data', 'data_alerta', 'data_abertura', 'data_registro', 'data_solicitacao', 'criado_em', 'date'],
+  latitude:    ['latitude', 'lat'],
+  longitude:   ['longitude', 'lng', 'long', 'lon'],
+  coordenadas: ['coordenadas', 'coordenada', 'coordinates', 'coords', 'ponto', 'lat_lng', 'lat_long', 'latlng', 'localizacao_gps'],
+};
+
+// "−7.143197,-34.845491" → { lat, lng } (valida faixas geográficas)
+function parseCoordenadas(v) {
+  const m = String(v || '').match(/(-?\d{1,3}(?:\.\d+)?)\s*[,;]\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
+}
+
+function mapearColunas(cabecalhos) {
+  const norm = cabecalhos.map(normalizarCabecalho);
+  const indices = {};
+  for (const [campo, sinonimos] of Object.entries(MAPA_COLUNAS)) {
+    for (const s of sinonimos) {
+      const i = norm.indexOf(s);
+      if (i >= 0) { indices[campo] = i; break; }
+    }
+  }
+  return indices;
+}
+
+// traduz códigos técnicos (ex.: Waze) para tipos do sistema
+function traduzTipo(v) {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (/pot.?hole|buraco/i.test(v)) return 'Pavimentação / Asfalto';
+  if (/flood|alagamento/i.test(v)) return 'Drenagem / Esgoto';
+  if (/light|ilumina/i.test(v)) return 'Iluminação Pública';
+  if (/^[A-Z][A-Z_ ]+$/.test(v)) return 'Outros'; // código desconhecido
+  return v;
+}
+
+function normalizarPrioridade(v) {
+  const p = (v || '').toLowerCase();
+  if (/alta|urgente|grave|critic/.test(p)) return 'alta';
+  if (/baixa|leve/.test(p)) return 'baixa';
+  return 'media';
+}
+
+function normalizarDataCSV(v) {
+  if (!v) return null;
+  v = v.trim();
+  const br = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`;
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  // formato extenso: "8 de jun. de 2026" / "8 de junho de 2026"
+  const ext = v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .match(/^(\d{1,2})\s+de\s+([a-z]{3})[a-z.]*\s+de\s+(\d{4})/);
+  if (ext) {
+    const meses = { jan:'01', fev:'02', mar:'03', abr:'04', mai:'05', jun:'06',
+                    jul:'07', ago:'08', set:'09', out:'10', nov:'11', dez:'12' };
+    const m = meses[ext[2]];
+    if (m) return `${ext[3]}-${m}-${ext[1].padStart(2,'0')}`;
+  }
+  return null;
+}
+
+// descobre o bairro de João Pessoa a partir da coordenada (point-in-polygon, offline)
+function bairroPorCoordenada(lat, lng) {
+  const mapa = window.BAIRROS_JP;
+  if (!mapa || lat == null || lng == null) return '';
+  const x = +lng, y = +lat;
+  if (!isFinite(x) || !isFinite(y)) return '';
+  const dentro = (anel) => {
+    let inside = false;
+    for (let i = 0, j = anel.length - 1; i < anel.length; j = i++) {
+      const xi = anel[i][0], yi = anel[i][1], xj = anel[j][0], yj = anel[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  };
+  for (const b of mapa) {
+    for (const anel of b.a) if (dentro(anel)) return b.n;
+  }
+  return ''; // fora de João Pessoa (ex.: Cabedelo, Bayeux, Santa Rita)
+}
+
+// extrai "lat, lng" da referência da O.S. e devolve o bairro sugerido pela coordenada
+function bairroSugeridoOS(os) {
+  const m = (os.referencia || '').match(/Coordenadas:\s*(-?\d+(?:\.\d+)?)[,;]\s*(-?\d+(?:\.\d+)?)/i);
+  return m ? bairroPorCoordenada(m[1], m[2]) : '';
+}
+
+// monta as <option> da lista de bairros, marcando o atual como selecionado
+function opcoesBairros(atual) {
+  const nomes = (window.BAIRROS_JP || []).map(b => b.n).sort((a, b) => a.localeCompare(b, 'pt'));
+  if (atual && !nomes.includes(atual)) nomes.push(atual); // preserva valor fora da lista
+  nomes.sort((a, b) => a.localeCompare(b, 'pt'));
+  return nomes.map(n => `<option value="${n.replace(/"/g, '&quot;')}"${n === atual ? ' selected' : ''}>${n}</option>`).join('');
+}
+
+async function salvarBairro(valor) {
+  const os = S.osAberta;
+  if (!os) return;
+  await atualizarOS(os.id, { bairro: valor });
+}
+
+// opções do seletor de tipo, marcando o atual como selecionado
+function opcoesTipo(atual) {
+  const tipos = ['Pavimentação / Asfalto','Drenagem / Esgoto','Iluminação Pública','Limpeza Urbana',
+    'Manutenção de Praças','Bueiros / Bocas de Lobo','Calçadas / Passeios','Pontes / Viadutos',
+    'Sinalização Viária','Outros'];
+  if (atual && !tipos.includes(atual)) tipos.unshift(atual);
+  return tipos.map(t => `<option${t === atual ? ' selected' : ''}>${esc(t)}</option>`).join('');
+}
+
+// card de informações: editável quando a O.S. está aberta; somente leitura caso contrário
+function renderInfoCard(os) {
+  const attr = v => String(v ?? '').replace(/"/g, '&quot;');
+  const editando = S.editandoInfo && os.status === 'aberta';
+  const btnEditar = (os.status === 'aberta' && !editando)
+    ? `<button type="button" class="btn-sugestao" onclick="editarInfo()">✏️ Editar</button>` : '';
+  const titulo = `<div class="form-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span>📋 Informações</span>${btnEditar}
+    </div>`;
+
+  if (!editando) {
+    return `${titulo}
+      <table class="info-table">
+        <tr><td>Tipo</td><td>${os.tipo||'–'}</td></tr>
+        <tr><td>Endereço</td><td>${os.endereco||'–'}</td></tr>
+        <tr><td>Bairro</td><td>
+          <select class="form-input" style="padding:6px 10px;font-size:13px;width:auto;min-width:180px" onchange="salvarBairro(this.value)">
+            <option value="">— sem bairro —</option>
+            ${opcoesBairros(os.bairro)}
+          </select>
+          ${(!os.bairro && bairroSugeridoOS(os)) ? `<button type="button" class="btn-sugestao" onclick="salvarBairro('${bairroSugeridoOS(os).replace(/'/g,"\\'")}')">📍 Usar da coordenada: ${bairroSugeridoOS(os)}</button>` : ''}
+        </td></tr>
+        ${os.referencia?`<tr><td>Referência</td><td>${os.referencia}</td></tr>`:''}
+        <tr><td>Solicitante</td><td>${os.solicitante||'–'}</td></tr>
+        ${os.responsavel?`<tr><td>Responsável</td><td>${os.responsavel}</td></tr>`:''}
+        ${os.equipe?`<tr><td>Equipe</td><td>${os.equipe}</td></tr>`:''}
+        <tr><td>Prioridade</td><td class="prio-${os.prioridade}">${labelPrio(os.prioridade)}</td></tr>
+        ${os.tag?`<tr><td>Origem</td><td><span class="tag-pill">🏷️ ${os.tag}</span></td></tr>`:''}
+        ${os.ocorrencias>1?`<tr><td>Recorrência</td><td><span class="recorrente-pill">🔁 ${os.ocorrencias} ocorrências</span><div style="font-size:12px;color:var(--cinza-texto);margin-top:4px">Primeira ocorrência em ${fmtData(os.primeiraOcorrencia||os.criadoEm)}</div></td></tr>`:''}
+        ${os.prazo?`<tr><td>Prazo</td><td>${fmtData(os.prazo)}</td></tr>`:''}
+        <tr><td>Aberta em</td><td>${fmtDataHora(os.criadoEm)}</td></tr>
+        ${os.concluidoEm?`<tr><td>Concluída em</td><td>${fmtDataHora(os.concluidoEm)}</td></tr>`:''}
+      </table>
+      ${os.descricao?`<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--cinza-bg)">
+        <div style="font-size:11px;font-weight:700;color:var(--cinza-texto);margin-bottom:5px;text-transform:uppercase">Descrição</div>
+        <p style="font-size:13px;line-height:1.6">${os.descricao}</p>
+      </div>`:''}`;
+  }
+  // modo edição (status aberta)
+  const sug = bairroSugeridoOS(os);
+  return `${titulo}
+    <div class="form-group"><label class="form-label">Tipo de Serviço</label>
+      <select class="form-input" id="infTipo">${opcoesTipo(os.tipo)}</select></div>
+    <div class="form-group"><label class="form-label">Descrição</label>
+      <textarea class="form-input" id="infDescricao" rows="3">${esc(os.descricao||'')}</textarea></div>
+    <div class="form-group"><label class="form-label">Endereço</label>
+      <input class="form-input" type="text" id="infEndereco" value="${attr(os.endereco)}"></div>
+    <div class="form-group"><label class="form-label">Bairro</label>
+      <select class="form-input" id="infBairro"><option value="">— sem bairro —</option>${opcoesBairros(os.bairro)}</select>
+      ${(!os.bairro && sug) ? `<div style="font-size:11px;color:var(--cinza-texto);margin-top:4px">📍 Sugestão pela coordenada: <strong>${sug}</strong> (selecione acima e salve)</div>` : ''}</div>
+    <div class="form-group"><label class="form-label">Ponto de Referência</label>
+      <input class="form-input" type="text" id="infReferencia" value="${attr(os.referencia)}"></div>
+    <div class="form-group"><label class="form-label">Solicitante</label>
+      <input class="form-input" type="text" id="infSolicitante" value="${attr(os.solicitante)}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label class="form-label">Responsável</label>
+        <input class="form-input" type="text" id="infResponsavel" list="respSugestoes" value="${attr(os.responsavel)}"></div>
+      <div class="form-group" style="margin:0"><label class="form-label">Equipe</label>
+        <input class="form-input" type="text" id="infEquipe" list="eqSugestoes" value="${attr(os.equipe)}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="margin:0"><label class="form-label">Prioridade</label>
+        <select class="form-input" id="infPrioridade">
+          <option value="baixa"${os.prioridade==='baixa'?' selected':''}>🟢 Baixa</option>
+          <option value="media"${os.prioridade==='media'?' selected':''}>🟡 Média</option>
+          <option value="alta"${os.prioridade==='alta'?' selected':''}>🔴 Alta</option>
+        </select></div>
+      <div class="form-group" style="margin:0"><label class="form-label">Prazo</label>
+        <input class="form-input" type="date" id="infPrazo" value="${os.prazo?String(os.prazo).slice(0,10):''}"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="salvarInfo()">💾 Salvar</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="cancelarInfo()">Cancelar</button>
+    </div>
+    <table class="info-table" style="margin-top:14px">
+      ${os.tag?`<tr><td>Origem</td><td><span class="tag-pill">🏷️ ${os.tag}</span></td></tr>`:''}
+      ${os.ocorrencias>1?`<tr><td>Recorrência</td><td><span class="recorrente-pill">🔁 ${os.ocorrencias} ocorrências</span><div style="font-size:12px;color:var(--cinza-texto);margin-top:4px">Primeira ocorrência em ${fmtData(os.primeiraOcorrencia||os.criadoEm)}</div></td></tr>`:''}
+      <tr><td>Aberta em</td><td>${fmtDataHora(os.criadoEm)}</td></tr>
+    </table>`;
+}
+
+function editarInfo() {
+  S.editandoInfo = true;
+  const el = document.getElementById('cardInfo');
+  if (el) el.innerHTML = renderInfoCard(S.osAberta);
+}
+
+function cancelarInfo() {
+  S.editandoInfo = false;
+  const el = document.getElementById('cardInfo');
+  if (el) el.innerHTML = renderInfoCard(S.osAberta);
+}
+
+async function salvarInfo() {
+  const os = S.osAberta;
+  if (!os) return;
+  S.editandoInfo = false;
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : undefined; };
+  await atualizarOS(os.id, {
+    tipo: v('infTipo'),
+    descricao: v('infDescricao'),
+    endereco: v('infEndereco'),
+    bairro: v('infBairro'),
+    referencia: v('infReferencia'),
+    solicitante: v('infSolicitante'),
+    responsavel: v('infResponsavel'),
+    equipe: v('infEquipe'),
+    prioridade: v('infPrioridade'),
+    prazo: v('infPrazo') || null,
+  });
+}
+
+let csvTextoAtual = null, csvNomeAtual = '';
+
+function selecionarCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    csvTextoAtual = e.target.result;
+    csvNomeAtual = file.name;
+    processarCSV(csvTextoAtual, csvNomeAtual);
+  };
+  reader.readAsText(file, 'utf-8');
+  input.value = '';
+}
+
+// reprocessa quando o usuário liga/desliga o agrupamento
+function reprocessarCSV() {
+  if (csvTextoAtual) processarCSV(csvTextoAtual, csvNomeAtual);
+}
+
+function processarCSV(texto, nomeArquivo) {
+  const preview = document.getElementById('importPreview');
+  const btn = document.getElementById('btnImportar');
+  csvOrdensParaImportar = [];
+  btn.style.display = 'none';
+
+  const linhas = parseCSV(texto);
+  if (linhas.length < 2) {
+    preview.innerHTML = `<div class="alert alert-error">❌ Arquivo vazio ou sem linhas de dados (precisa de cabeçalho + dados).</div>`;
+    return;
+  }
+
+  const idx = mapearColunas(linhas[0]);
+  if (idx.endereco === undefined && idx.descricao === undefined) {
+    preview.innerHTML = `<div class="alert alert-error">❌ Não encontrei coluna de endereço nem de descrição no cabeçalho:<br><code>${linhas[0].join(' | ')}</code></div>`;
+    return;
+  }
+
+  const pega = (linha, campo) => {
+    if (idx[campo] === undefined) return '';
+    const v = (linha[idx[campo]] || '').trim();
+    return /^(null|undefined|n\/a|-)$/i.test(v) ? '' : v; // lixo comum em exports
+  };
+
+  const itens = [];
+  for (const linha of linhas.slice(1)) {
+    const endereco = pega(linha, 'endereco');
+    let descricao = pega(linha, 'descricao');
+    const coord = parseCoordenadas(pega(linha, 'coordenadas')) ||
+                  parseCoordenadas(pega(linha, 'latitude') + ',' + pega(linha, 'longitude'));
+    if (!endereco && !descricao && !coord) continue; // sem rua nem ponto: nada a localizar
+
+    let referencia = pega(linha, 'referencia');
+    if (coord) referencia = (referencia ? referencia + ' · ' : '') + `Coordenadas: ${coord.lat}, ${coord.lng}`;
+    if (!descricao) descricao = 'Buraco na via' + (endereco ? ` — ${endereco}` : coord ? ` — ponto ${coord.lat}, ${coord.lng}` : '');
+    const data = normalizarDataCSV(pega(linha, 'criadoEm'));
+
+    // sem bairro na planilha? deriva da coordenada (mapa de bairros de João Pessoa)
+    let bairro = pega(linha, 'bairro');
+    if (!bairro && coord) bairro = bairroPorCoordenada(coord.lat, coord.lng);
+
+    itens.push({
+      tipo: traduzTipo(pega(linha, 'tipo')) || 'Pavimentação / Asfalto',
+      descricao, endereco,
+      bairro,
+      referencia,
+      solicitante: pega(linha, 'solicitante') || (document.getElementById('solImportCSV')?.value || '').trim(),
+      responsavel: pega(linha, 'responsavel') || (document.getElementById('respImportCSV')?.value || '').trim(),
+      equipe: pega(linha, 'equipe') || (document.getElementById('eqImportCSV')?.value || '').trim(),
+      prioridade: normalizarPrioridade(pega(linha, 'prioridade')),
+      prazo: normalizarDataCSV(pega(linha, 'prazo')),
+      criadoEm: data,
+      ocorrencias: Math.max(1, parseInt(pega(linha, 'quantidade'), 10) || 1),
+      primeiraOcorrencia: data,
+      tag: (document.getElementById('tagImportCSV')?.value || '').trim(),
+      // pontos distintos da mesma rua não devem ser agrupados (~11 m de tolerância)
+      chavePonto: coord ? `${coord.lat.toFixed(4)},${coord.lng.toFixed(4)}` : '',
+    });
+  }
+
+  const totalLinhas = itens.length;
+  const agrupar = document.getElementById('chkAgruparCSV')?.checked ?? true;
+  if (agrupar) {
+    const grupos = new Map();
+    for (const it of itens) {
+      const chave = it.chavePonto || `${(it.endereco || it.descricao).toLowerCase()}|${(it.bairro || '').toLowerCase()}`;
+      const g = grupos.get(chave);
+      if (!g) { grupos.set(chave, { ...it }); continue; }
+      g.ocorrencias += it.ocorrencias;
+      if (it.criadoEm) {
+        if (!g.primeiraOcorrencia || it.criadoEm < g.primeiraOcorrencia) g.primeiraOcorrencia = it.criadoEm;
+        if (!g.criadoEm || it.criadoEm > g.criadoEm) g.criadoEm = it.criadoEm; // OS "aberta" na ocorrência mais recente
+      }
+      if (it.prioridade === 'alta') g.prioridade = 'alta';
+      if (!g.referencia && it.referencia) g.referencia = it.referencia;
+    }
+    csvOrdensParaImportar = [...grupos.values()];
+  } else {
+    csvOrdensParaImportar = itens;
+  }
+
+  if (!csvOrdensParaImportar.length) {
+    preview.innerHTML = `<div class="alert alert-error">❌ Nenhuma linha válida encontrada no arquivo.</div>`;
+    return;
+  }
+
+  const recorrentes = csvOrdensParaImportar.filter(o => o.ocorrencias > 1).length;
+  const detectadas = Object.keys(idx).map(c => `<code>${c}</code>`).join(', ');
+  const amostra = csvOrdensParaImportar.slice(0, 3).map(o =>
+    `<li style="margin-bottom:4px">${o.chavePonto ? '🧭' : '📍'} ${o.endereco || '(sem endereço)'}${o.bairro ? ', ' + o.bairro : ''} — ${o.descricao.substring(0, 60)}${o.ocorrencias > 1 ? ` <strong>(🔁 ${o.ocorrencias}x)</strong>` : ''}</li>`).join('');
+  preview.innerHTML = `
+    <div class="alert alert-info">📄 <strong>${nomeArquivo}</strong>: ${totalLinhas} linha(s) → <strong>${csvOrdensParaImportar.length} O.S.</strong>${agrupar && totalLinhas > csvOrdensParaImportar.length ? ` (agrupadas por ponto/endereço, ${recorrentes} recorrentes)` : ''}${linhas.length - 1 - totalLinhas > 0 ? ` · ${linhas.length - 1 - totalLinhas} linha(s) sem endereço nem coordenadas ignoradas` : ''}</div>
+    <div style="font-size:12px;color:var(--cinza-texto);margin-bottom:8px">Colunas reconhecidas: ${detectadas}</div>
+    <ul style="font-size:12px;color:var(--cinza-texto);padding-left:16px">${amostra}</ul>`;
+  btn.style.display = 'flex';
+}
+
+async function confirmarImportCSV() {
+  if (!csvOrdensParaImportar.length) return;
+  const btn = document.getElementById('btnImportar');
+  const preview = document.getElementById('importPreview');
+  btn.disabled = true;
+  btn.textContent = '⏳ Importando...';
+  try {
+    // o servidor aceita até 2000 por chamada; arquivos grandes vão em lotes
+    const LOTE = 1000;
+    const total = csvOrdensParaImportar.length;
+    let importadas = 0, ignoradas = 0;
+    for (let i = 0; i < total; i += LOTE) {
+      if (total > LOTE) btn.textContent = `⏳ Importando... (${Math.min(i + LOTE, total)}/${total})`;
+      const r = await fetch('/api/ordens/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordens: csvOrdensParaImportar.slice(i, i + LOTE) }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.erro || `Erro ${r.status}`);
+      importadas += data.importadas;
+      ignoradas += data.ignoradas || 0;
+    }
+    preview.innerHTML = `<div class="alert alert-success">✅ ${importadas} O.S. importadas com sucesso!${ignoradas ? ` (${ignoradas} linha(s) ignoradas)` : ''}</div>`;
+    csvOrdensParaImportar = [];
+    btn.style.display = 'none';
+    await carregarOS();
+    renderRelatorio();
+    toast(`✅ ${importadas} O.S. criadas a partir do CSV!`);
+  } catch (e) {
+    preview.innerHTML += `<div class="alert alert-error">❌ Erro ao importar: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✅ Importar ordens';
+  }
+}
+
+function exportarCSV() {
+  let ordens = S.ordens;
+  const de = document.getElementById('relDe').value;
+  const ate = document.getElementById('relAte').value;
+  if (de) ordens = ordens.filter(o => o.criadoEm >= de);
+  if (ate) ordens = ordens.filter(o => o.criadoEm <= ate + 'T23:59:59');
+
+  const hdrs = ['Número','Tipo','Descrição','Status','Endereço','Bairro','Solicitante','Responsável','Equipe','Prioridade','Tag','Ocorrências','Primeira Ocorrência','Prazo','Aberta em','Concluída em'];
+  const rows = ordens.map(o => [
+    o.numero, o.tipo, o.descricao||'', labelStatus(o.status),
+    o.endereco||'', o.bairro||'', o.solicitante||'', o.responsavel||'', o.equipe||'',
+    o.prioridade||'', o.tag||'', o.ocorrencias||1, o.primeiraOcorrencia?fmtData(o.primeiraOcorrencia):'',
+    o.prazo||'', fmtDataHora(o.criadoEm), o.concluidoEm?fmtDataHora(o.concluidoEm):''
+  ]);
+  const esc = v => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g,'""') + '"' : String(v);
+  const csv = [hdrs, ...rows].map(r => r.map(esc).join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8;' }));
+  Object.assign(document.createElement('a'), { href:url, download:`OS_${new Date().toISOString().slice(0,10)}.csv` }).click();
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+function toggleConfig() {
+  document.getElementById('configPanel').classList.toggle('open');
+}
+function closeConfigBg(e) {
+  if (e.target === document.getElementById('configPanel')) toggleConfig();
+}
+
+async function testarConexao() {
+  const el = document.getElementById('dbStatus');
+  el.className = 'db-status disconnected';
+  el.innerHTML = '<span class="db-dot"></span> Testando...';
+  try {
+    const r = await fetch('/api/ping');
+    const d = await r.json();
+    if (d.ok) {
+      el.className = 'db-status connected';
+      el.innerHTML = '<span class="db-dot"></span> Conectado ao Neon DB ✓';
+    } else throw new Error();
+  } catch {
+    el.className = 'db-status disconnected';
+    el.innerHTML = '<span class="db-dot"></span> Sem conexão com o banco';
+  }
+}
+
+async function testarConexaoSilencioso() {
+  try {
+    const r = await fetch('/api/ping');
+    const d = await r.json();
+    const el = document.getElementById('dbStatus');
+    if (d.ok) {
+      el.className = 'db-status connected';
+      el.innerHTML = '<span class="db-dot"></span> Banco de dados conectado ✓';
+    }
+  } catch {}
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function labelStatus(s) {
+  return { aberta:'Aberta', validada:'Validada', andamento:'Em Andamento', concluida:'Concluída', cancelada:'Cancelada' }[s] || s;
+}
+function labelPrio(p) {
+  return { alta:'🔴 Alta — Urgente', media:'🟡 Média', baixa:'🟢 Baixa' }[p] || p;
+}
+function corStatus(s) {
+  return { aberta:'var(--azul)', validada:'#8a5fd0', andamento:'var(--amarelo)', concluida:'var(--verde-medio)', cancelada:'var(--vermelho)' }[s] || '#888';
+}
+function iconStatus(s) {
+  return { aberta:'📋', validada:'✔️', andamento:'🔧', concluida:'✅', cancelada:'❌' }[s] || '•';
+}
+function fmtData(d) {
+  if (!d) return '';
+  const parts = String(d).split('T')[0].split('-');
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+function fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+}
+function toast(msg, dur = 2200) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), dur);
+}
+</script>
+</body>
+</html>
