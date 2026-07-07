@@ -145,9 +145,23 @@ um dashboard de indicadores. Inclui também a sincronização de **buracos
 reportados no Waze** (via BigQuery), exibidos num mapa próprio
 (`/os/dashboard-waze.html`).
 
-Front-end mobile-first, servido em `/os` (app principal), com dois
-relatórios em janelas próprias: `/os/dashboard.html` e
+Interface **dark** e responsiva (celular e desktop), servida em `/os` (app
+principal), com dois relatórios em janelas próprias: `/os/dashboard.html` e
 `/os/dashboard-waze.html`.
+
+### Dados de demonstração (apresentação ao cliente)
+
+Para mostrar o módulo com dados fictícios antes dos reais, carregue 10 O.S. de
+demonstração (João Pessoa, com coordenadas para aparecerem no mapa):
+
+```bash
+npm run seed-os              # recusa se já houver O.S. no banco
+npm run seed-os -- --truncate # substitui o que existir por dados de demonstração
+```
+
+No deploy, sem shell, defina `SEED_OS_DEMO=true`: no boot, se **não houver
+nenhuma O.S.**, o servidor carrega as ordens de demonstração automaticamente
+(não apaga dados existentes). Volte para `false` ao operar com dados reais.
 
 ### Waze / BigQuery (opcional)
 

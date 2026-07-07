@@ -21,5 +21,9 @@ services:
       # (somente se o banco estiver vazio). Use "false" com dados reais.
       - key: SEED_DEMO
         value: "false"
+      # Mude para "true" para carregar O.S. de demonstracao (Joao Pessoa) no boot,
+      # se ainda nao houver nenhuma. Util para apresentar o modulo /os ao cliente.
+      - key: SEED_OS_DEMO
+        value: "false"
       - key: NODE_VERSION
         value: "22"

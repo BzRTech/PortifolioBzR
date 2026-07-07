@@ -8,13 +8,14 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
-import { isConfigured, healthcheck } from './src/db.js';
+import { isConfigured, healthcheck, query } from './src/db.js';
 import { ensureSchema } from './src/schema.js';
 import {
   isValidLayer, getLayerGeoJSON, getDashboard, getHeatmap,
   getExtent, getCounts, getBairros, getMunicipios,
 } from './src/queries.js';
 import { seedDemo } from './scripts/seed-demo.js';
+import { seedOsDemo } from './scripts/seed-os.js';
 import { osRouter, ensureOsSchema } from './src/os.js';
 import { IMPORT_LAYERS, insertFeatures, backfillMeasures } from './src/import.js';
 
@@ -219,6 +220,15 @@ async function start() {
           console.log('[db] SEED_DEMO=true e banco vazio — carregando cidade de demonstracao...');
           await seedDemo({ truncate: true, log: console.log });
           console.log('[db] seed de demonstracao concluido.');
+        }
+      }
+      // Auto-seed das O.S. de demonstracao (para apresentar o modulo ao cliente).
+      if (String(process.env.SEED_OS_DEMO || '') === 'true') {
+        const { rows } = await query('SELECT COUNT(*)::int AS n FROM ordens_servico');
+        if (rows[0].n === 0) {
+          console.log('[db] SEED_OS_DEMO=true e sem O.S. — carregando ordens de demonstracao...');
+          await seedOsDemo({ truncate: false, log: console.log });
+          console.log('[db] seed de O.S. de demonstracao concluido.');
         }
       }
     } catch (e) {
