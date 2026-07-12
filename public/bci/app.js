@@ -111,9 +111,25 @@ async function carregarResumo() {
   } catch { /* ignore */ }
 }
 
-function focarLote(codigo) {
-  const layer = S.loteLayers.get(String(codigo));
-  if (layer) { try { map.fitBounds(layer.getBounds(), { maxZoom: 18, padding: [40, 40] }); layer.openPopup(); } catch { /* ponto */ } }
+// Direciona o mapa para o BCI: usa o polígono do lote se estiver desenhado;
+// senão, cai no ponto GPS coletado.
+function focarBci(b, card) {
+  const layer = S.loteLayers.get(String(b.inscricao || ''));
+  if (layer) {
+    try {
+      map.fitBounds(layer.getBounds(), { maxZoom: 19, padding: [60, 60] });
+      layer.openPopup();
+      return true;
+    } catch { /* geometria inválida — tenta o ponto */ }
+  }
+  if (b.ponto && Number.isFinite(b.ponto.lat) && Number.isFinite(b.ponto.lng)) {
+    map.setView([b.ponto.lat, b.ponto.lng], 18);
+    L.popup({ maxWidth: 240 }).setLatLng([b.ponto.lat, b.ponto.lng])
+      .setContent(`<div style="font-weight:700">${(b.inscricao || 'BCI')}</div><div style="margin-top:6px"><a href="/bci/ficha.html?id=${b.id}">Abrir BCI →</a></div>`)
+      .openOn(map);
+    return true;
+  }
+  return false;
 }
 
 async function carregarLista() {
@@ -125,8 +141,9 @@ async function carregarLista() {
   try {
     const lista = await api('/api/bci?' + p.toString());
     if (!lista.length) { el('lista').innerHTML = `<div class="empty">Nenhum BCI ${p.toString() ? 'com esses filtros' : 'cadastrado'}.<br><br>Clique num lote no mapa para iniciar, ou em <strong>＋ Novo BCI</strong>.</div>`; return; }
+    const byId = new Map(lista.map((b) => [String(b.id), b]));
     el('lista').innerHTML = lista.map((b) => `
-      <div class="bcard" data-cod="${esc(b.inscricao)}" data-id="${b.id}">
+      <div class="bcard" data-id="${b.id}">
         <div class="top"><span class="insc">${esc(b.inscricao) || '(sem inscrição)'}</span><span class="st-pill st-${b.status}">${STATUS_LABEL[b.status]}</span></div>
         <div class="loc">📍 ${esc([b.bairro].filter(Boolean).join(' · ')) || '—'}${b.uso ? ' · ' + esc(b.uso) : ''}</div>
         <div class="foot">
@@ -134,17 +151,17 @@ async function carregarLista() {
           ${b.nFotos ? `<span>📷 ${b.nFotos}</span>` : ''}
           ${b.ponto ? '<span>📌 GPS</span>' : ''}
           ${b.ajuste?.geom && !b.ajuste?.resolvido ? '<span class="tag-aj">⚠ ajuste geom.</span>' : ''}
+          <a class="abrir" href="/bci/ficha.html?id=${b.id}">Abrir →</a>
         </div>
       </div>`).join('');
     el('lista').querySelectorAll('.bcard').forEach((c) => {
       c.addEventListener('click', (e) => {
-        // clique simples foca no lote; clique no título abre o BCI
-        if (e.detail === 2) { location.href = '/bci/ficha.html?id=' + c.dataset.id; return; }
+        if (e.target.closest('.abrir')) return; // deixa o link "Abrir" navegar
         el('lista').querySelectorAll('.bcard').forEach((x) => x.classList.remove('hl'));
         c.classList.add('hl');
-        focarLote(c.dataset.cod);
+        const b = byId.get(c.dataset.id);
+        if (b && !focarBci(b, c)) { /* sem localização */ }
       });
-      c.addEventListener('dblclick', () => (location.href = '/bci/ficha.html?id=' + c.dataset.id));
     });
   } catch (e) { el('lista').innerHTML = `<div class="empty">Erro: ${esc(e.message)}</div>`; }
 }
