@@ -1,7 +1,9 @@
 // App de Gestão de Demandas — Kanban, Lista, Minhas, Calendário.
-const TOKEN = localStorage.getItem('bzr_token');
+// Login é opcional: quando AUTH_ENABLED está desligado no servidor, o app abre
+// direto (sem tela de login) e esconde os elementos ligados a sessão.
+let TOKEN = localStorage.getItem('bzr_token');
+let AUTH = false;
 const NEXT = encodeURIComponent('/demandas/');
-if (!TOKEN) location.replace('/login?next=' + NEXT);
 
 const STATUS = [
   { id: 'pendente', label: 'Pendente', dot: '#9AA6A0' },
@@ -18,10 +20,11 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const iniciais = (nome) => (nome || '?').trim().split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
 async function authFetch(url, opts = {}) {
-  const headers = { ...(opts.headers || {}), Authorization: 'Bearer ' + TOKEN };
+  const headers = { ...(opts.headers || {}) };
+  if (TOKEN) headers.Authorization = 'Bearer ' + TOKEN;
   if (opts.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   const r = await fetch(url, { ...opts, headers });
-  if (r.status === 401) { localStorage.removeItem('bzr_token'); location.replace('/login?next=' + NEXT); throw new Error('Sessão expirada'); }
+  if (r.status === 401 && AUTH) { localStorage.removeItem('bzr_token'); location.replace('/login?next=' + NEXT); throw new Error('Sessão expirada'); }
   return r;
 }
 async function jget(url) { const r = await authFetch(url); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText); return r.json(); }
@@ -52,9 +55,10 @@ async function carregar() {
 function renderResumo(r) {
   const porStatus = Object.fromEntries((r.porStatus || []).map((x) => [x.status, x.n]));
   const abertas = (porStatus.pendente || 0) + (porStatus.em_andamento || 0);
+  const minhas = AUTH ? `<div class="stat minhas"><div class="v">${r.minhasAbertas || 0}</div><div class="l">Minhas abertas</div></div>` : '';
   el('resumo').innerHTML = `
     <div class="stat"><div class="v">${abertas}</div><div class="l">Abertas</div></div>
-    <div class="stat minhas"><div class="v">${r.minhasAbertas || 0}</div><div class="l">Minhas abertas</div></div>
+    ${minhas}
     <div class="stat alerta"><div class="v">${r.atrasadas || 0}</div><div class="l">Atrasadas</div></div>
     <div class="stat"><div class="v">${porStatus.concluida || 0}</div><div class="l">Concluídas</div></div>`;
 }
@@ -227,11 +231,22 @@ async function excluir() {
 
 // ---- init ----
 async function init() {
-  try {
-    const me = await jget('/api/auth/me');
-    S.user = me.user;
-    el('userchip').innerHTML = `<div class="avatar" title="${esc(S.user.nome)}">${esc(iniciais(S.user.nome))}</div><span>${esc(S.user.nome.split(' ')[0])} · ${esc(S.user.role)}</span>`;
-  } catch { return; }
+  try { AUTH = (await (await fetch('/api/auth/config')).json()).authEnabled; } catch { AUTH = false; }
+  if (AUTH && !TOKEN) { location.replace('/login?next=' + NEXT); return; }
+
+  if (AUTH) {
+    try {
+      const me = await jget('/api/auth/me');
+      S.user = me.user;
+      el('userchip').innerHTML = `<div class="avatar" title="${esc(S.user.nome)}">${esc(iniciais(S.user.nome))}</div><span>${esc(S.user.nome.split(' ')[0])} · ${esc(S.user.role)}</span>`;
+    } catch { return; }
+  } else {
+    // Sem login: esconde chip, botao de sair e a aba/atalho "Minhas".
+    el('userchip').style.display = 'none';
+    el('btn-logout').style.display = 'none';
+    const mb = el('views').querySelector('button[data-view="minhas"]');
+    if (mb) mb.style.display = 'none';
+  }
   try { S.usuarios = await jget('/api/usuarios'); } catch { S.usuarios = []; }
 
   el('views').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {

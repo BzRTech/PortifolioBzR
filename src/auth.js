@@ -10,6 +10,13 @@ export const ROLES = ['admin', 'coordenador', 'tecnico'];
 const SECRET = process.env.AUTH_SECRET || 'bzr-dev-secret-troque-em-producao';
 const TOKEN_TTL_S = 60 * 60 * 12; // 12h
 
+// Login LIGA/DESLIGA. Desligado (padrao): ninguem precisa autenticar — os
+// modulos ficam abertos e a tabela `usuarios` serve apenas como diretorio de
+// membros da equipe (para atribuir responsaveis). Ligue com AUTH_ENABLED=true
+// para exigir login e aplicar os 3 perfis (usado no fluxo de aprovacao do BCI).
+export const AUTH_ENABLED = String(process.env.AUTH_ENABLED || 'false') === 'true';
+const ANON = { uid: null, role: 'anon', nome: '' };
+
 // ---- Hash de senha (scrypt) ----------------------------------------------
 export function hashSenha(senha) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -55,12 +62,14 @@ function tokenDaRequest(req) {
   return null;
 }
 export function requireAuth(req, res, next) {
+  if (!AUTH_ENABLED) { req.user = ANON; return next(); }
   const claims = verificarToken(tokenDaRequest(req));
   if (!claims) return res.status(401).json({ error: 'Não autenticado.' });
   req.user = claims;
   next();
 }
 export const requireRole = (...roles) => (req, res, next) => {
+  if (!AUTH_ENABLED) { req.user = ANON; return next(); }
   const claims = verificarToken(tokenDaRequest(req));
   if (!claims) return res.status(401).json({ error: 'Não autenticado.' });
   if (!roles.includes(claims.role)) return res.status(403).json({ error: 'Sem permissão.' });
@@ -109,6 +118,9 @@ export async function ensureAuthSchema() {
 const publicUser = (r) => ({ id: r.id, nome: r.nome, email: r.email, role: r.role, equipe: r.equipe || '', ativo: r.ativo });
 
 export const authRouter = Router();
+
+// Config publica: o front decide se mostra a tela de login.
+authRouter.get('/api/auth/config', (req, res) => res.json({ authEnabled: AUTH_ENABLED }));
 
 authRouter.post('/api/auth/login', async (req, res) => {
   if (!isConfigured) return res.status(503).json({ error: 'Banco não configurado.' });

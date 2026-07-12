@@ -25,7 +25,11 @@ services:
       # se ainda nao houver nenhuma. Util para apresentar o modulo /os ao cliente.
       - key: SEED_OS_DEMO
         value: "false"
-      # Autenticacao (Demandas / BCI): segredo dos tokens, gerado pelo Render.
+      # Login desligado por padrao (modulos abertos). Mude para "true" para
+      # exigir login e aplicar os 3 perfis (admin/coordenador/tecnico).
+      - key: AUTH_ENABLED
+        value: "false"
+      # Autenticacao (usada so quando AUTH_ENABLED=true): segredo dos tokens.
       - key: AUTH_SECRET
         generateValue: true
       # Admin criado no primeiro boot. Troque a senha depois de entrar.
