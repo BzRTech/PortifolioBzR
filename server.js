@@ -21,6 +21,8 @@ import { IMPORT_LAYERS, insertFeatures, backfillMeasures } from './src/import.js
 import { authRouter, ensureAuthSchema } from './src/auth.js';
 import { demandasRouter, ensureDemandasSchema } from './src/demandas.js';
 import { seedDemandasDemo } from './scripts/seed-demandas.js';
+import { bciRouter, ensureBciSchema } from './src/bci.js';
+import { seedBciDemo } from './scripts/seed-bci.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -48,7 +50,8 @@ app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] })
 
 // ---- Autenticacao + modulos protegidos -----------------------------------
 app.use(authRouter);      // /api/auth/*, /api/usuarios
-app.use(demandasRouter);  // /api/demandas/* (exige token)
+app.use(demandasRouter);  // /api/demandas/*
+app.use(bciRouter);       // /api/bci/* (cadastro imobiliario)
 
 // ---- Modulo de Ordens de Servico (rotas /api/ordens, /api/waze/*) --------
 app.use(osRouter);
@@ -220,7 +223,8 @@ async function start() {
       await ensureOsSchema();
       await ensureAuthSchema();
       await ensureDemandasSchema();
-      console.log('[db] schema verificado (território + O.S. + auth + demandas).');
+      await ensureBciSchema();
+      console.log('[db] schema verificado (território + O.S. + auth + demandas + BCI).');
       // Auto-seed opcional: util para um deploy de demonstracao sem shell.
       if (String(process.env.SEED_DEMO || '') === 'true') {
         const counts = await getCounts();
@@ -247,6 +251,15 @@ async function start() {
           console.log('[db] SEED_DEMANDAS_DEMO=true e sem demandas — carregando demonstracao...');
           await seedDemandasDemo({ log: console.log });
           console.log('[db] seed de demandas de demonstracao concluido.');
+        }
+      }
+      // Auto-seed dos BCIs de demonstracao.
+      if (String(process.env.SEED_BCI_DEMO || '') === 'true') {
+        const { rows } = await query('SELECT COUNT(*)::int AS n FROM bci');
+        if (rows[0].n === 0) {
+          console.log('[db] SEED_BCI_DEMO=true e sem BCIs — carregando demonstracao...');
+          await seedBciDemo({ log: console.log });
+          console.log('[db] seed de BCI de demonstracao concluido.');
         }
       }
     } catch (e) {

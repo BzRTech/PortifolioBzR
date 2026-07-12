@@ -40,5 +40,8 @@ services:
       # Mude para "true" para carregar demandas de demonstracao no boot.
       - key: SEED_DEMANDAS_DEMO
         value: "false"
+      # Mude para "true" para carregar BCIs de demonstracao no boot.
+      - key: SEED_BCI_DEMO
+        value: "false"
       - key: NODE_VERSION
         value: "22"

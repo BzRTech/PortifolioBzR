@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
+  <title>BzR — Boletim de Cadastro Imobiliário</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { overflow: auto; display: block; }
+    .topbar2 { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: var(--bg-elev); border-bottom: 1px solid var(--line); }
+    .topbar2 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .topbar2 .brand img { width: 32px; height: 32px; }
+    .topbar2 .brand strong { font-size: 15px; font-weight: 800; }
+    .topbar2 .brand .accent { color: var(--brand); }
+    .spacer { flex: 1; }
+    .navlink { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 10px; border-radius: 8px; }
+    .navlink:hover { background: var(--bg-elev-2); color: var(--text); }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 18px 18px 90px; }
+    .status-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .st-pill { font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: .4px; }
+    .st-rascunho { background: var(--bg-elev-2); color: var(--text-dim); }
+    .st-enviado { background: rgba(59,130,246,.16); color: #7fb5f0; }
+    .st-aprovado { background: rgba(31,191,99,.15); color: #6ee7a8; }
+    .st-rejeitado { background: rgba(192,57,43,.18); color: #ef6c60; }
+    .st-arquivado { background: rgba(148,163,184,.16); color: #cbd5e1; }
+    .card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+    .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color: var(--text-dim); margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+    .card h2 .n { background: var(--bg-elev-2); border-radius: 6px; padding: 1px 7px; font-size: 11px; color: var(--brand); }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 14px; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+    .fld { display: flex; flex-direction: column; gap: 5px; }
+    .fld.full { grid-column: 1 / -1; }
+    .fld label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+    .fld input, .fld select, .fld textarea { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; font-size: 14px; }
+    .fld input:focus, .fld select:focus, .fld textarea:focus { outline: none; border-color: var(--accent); }
+    .fld textarea { min-height: 64px; resize: vertical; }
+    .fld.bool { flex-direction: row; align-items: center; gap: 9px; }
+    .fld.bool input { width: 17px; height: 17px; accent-color: var(--accent); }
+    .fld.bool label { order: 2; }
+    .req { color: #ef6c60; }
+    .hint { font-size: 11.5px; color: var(--text-dim); }
+    .gps { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .btn2 { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; border: 1px solid var(--line); background: var(--bg-elev-2); color: var(--text); border-radius: 9px; padding: 9px 13px; font-size: 13px; font-weight: 600; }
+    .btn2:hover { border-color: var(--accent); }
+    .btn2.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--brand-ink); border-color: transparent; font-weight: 700; }
+    .btn2.warn { color: #f6a94a; border-color: rgba(245,169,74,.4); }
+    .btn2.danger { color: #ef6c60; border-color: rgba(192,57,43,.4); }
+    .fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+    .foto { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+    .foto img { width: 100%; height: 110px; object-fit: cover; display: block; }
+    .foto .tp { position: absolute; top: 5px; left: 5px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; background: rgba(0,0,0,.6); color: #fff; padding: 1px 6px; border-radius: 5px; }
+    .foto .rm { position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,.6); color: #fff; border: none; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; }
+    .actionbar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-elev); border-top: 1px solid var(--line); padding: 12px 18px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; z-index: 40; }
+    .actionbar .spacer { flex: 1; }
+    .ajuste-box { border: 1px dashed rgba(245,169,74,.5); background: rgba(245,169,74,.06); border-radius: 12px; padding: 14px; }
+    .toast { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); background: var(--bg-elev-2); border: 1px solid var(--line); color: var(--text); padding: 11px 18px; border-radius: 22px; font-size: 13px; font-weight: 600; z-index: 60; display: none; }
+    .ro input, .ro select, .ro textarea { opacity: .85; }
+  </style>
+</head>
+<body>
+  <header class="topbar2">
+    <a class="brand" href="/bci/"><img src="/assets/bzr-mark.svg" alt="BzR" /><strong>BzR <span class="accent">BCI</span></strong></a>
+    <div class="spacer"></div>
+    <a class="navlink" href="/bci/">← Lista de BCIs</a>
+    <a class="navlink" href="/">Território</a>
+  </header>
+
+  <div class="wrap">
+    <div class="status-bar">
+      <h1 style="font-size:19px;margin:0" id="titulo">Novo BCI</h1>
+      <span class="st-pill st-rascunho" id="status-pill">Rascunho</span>
+      <span class="hint" id="meta"></span>
+    </div>
+
+    <div id="rejeicao"></div>
+
+    <!-- Identificação do imóvel (fixa) -->
+    <div class="card">
+      <h2>📌 Imóvel</h2>
+      <div class="grid">
+        <div class="fld"><label>Inscrição / código do lote <span class="req">*</span></label><input id="inscricao" placeholder="Ex.: 381790124" /></div>
+        <div class="fld"><label>Município</label><input id="municipio" placeholder="Ex.: João Pessoa" /></div>
+        <div class="fld"><label>Bairro</label><input id="bairro" /></div>
+        <div class="fld"><label>Uso</label>
+          <select id="uso"><option value="">—</option><option>Residencial</option><option>Comercial</option><option>Industrial</option><option>Serviços</option><option>Territorial</option><option>Misto</option><option>Outro</option></select>
+        </div>
+        <div class="fld"><label>Área do terreno (m²)</label><input id="areaTerreno" inputmode="decimal" /></div>
+        <div class="fld"><label>Área construída (m²)</label><input id="areaConstruida" inputmode="decimal" /></div>
+        <div class="fld full"><label>Localização (GPS)</label>
+          <div class="gps">
+            <button type="button" class="btn2" id="btn-gps">📍 Capturar GPS</button>
+            <span class="hint" id="gps-info">Sem ponto capturado.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Seções dinâmicas do formulário -->
+    <div id="secoes"></div>
+
+    <!-- Observações -->
+    <div class="card">
+      <h2>📝 Observações</h2>
+      <div class="fld full"><textarea id="observacoes" placeholder="Anotações da coleta…"></textarea></div>
+    </div>
+
+    <!-- Ajuste de geometria -->
+    <div class="card">
+      <h2>✏️ Ajuste de geometria do lote</h2>
+      <div class="ajuste-box">
+        <div class="fld bool" style="margin-bottom:10px"><input type="checkbox" id="aj-geom" /><label for="aj-geom">O desenho deste lote precisa de ajuste</label></div>
+        <div class="grid" id="aj-campos" style="display:none">
+          <div class="fld"><label>Tipo de ajuste</label>
+            <select id="aj-tipo"><option value="">—</option><option value="merge">Fundir com outro lote</option><option value="desmembrar">Desmembrar</option><option value="redesenhar">Redesenhar divisa</option><option value="reposicionar">Reposicionar</option><option value="outro">Outro</option></select>
+          </div>
+          <div class="fld"><label>Inscrições relacionadas (ex.: lotes a fundir)</label><input id="aj-inscricoes" placeholder="Ex.: 381790125, 381790126" /></div>
+          <div class="fld full"><label>Observação do ajuste</label><textarea id="aj-obs"></textarea></div>
+        </div>
+        <div id="aj-status"></div>
+      </div>
+    </div>
+
+    <!-- Fotos (apenas após salvar) -->
+    <div class="card" id="card-fotos">
+      <h2>📷 Fotos <span class="hint" id="fotos-hint" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div class="gps" id="fotos-acoes" style="display:none">
+        <label class="btn2">📷 Foto geral<input type="file" accept="image/*" capture="environment" multiple hidden id="in-geral"></label>
+        <label class="btn2">✏️ Croqui<input type="file" accept="image/*" multiple hidden id="in-croqui"></label>
+      </div>
+      <div class="fotos" id="lista-fotos"></div>
+    </div>
+  </div>
+
+  <div class="actionbar" id="actionbar"></div>
+  <div class="toast" id="toast"></div>
+
+  <script src="/bci/ficha.js"></script>
+</body>
+</html>

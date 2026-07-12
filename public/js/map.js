@@ -97,10 +97,16 @@ function buildPopup(id, p) {
       return `<div class="popup-title">${p.nome || 'Bairro'}</div>`
         + row('População', fmtInt(p.populacao))
         + row('Área', fmtArea(p.area_m2));
-    case 'lotes':
+    case 'lotes': {
+      const q = new URLSearchParams();
+      if (p.codigo) q.set('lote', p.codigo);
+      if (p.municipio) q.set('municipio', p.municipio);
+      if (p.bairro) q.set('bairro', p.bairro);
       return `<div class="popup-title">Lote ${p.codigo || ''}</div>`
         + row('Uso', p.uso || '—') + row('Quadra', p.quadra || '—')
-        + row('Bairro', p.bairro || '—') + row('Área', fmtArea(p.area_m2));
+        + row('Bairro', p.bairro || '—') + row('Área', fmtArea(p.area_m2))
+        + `<a class="popup-bci" href="/bci/ficha.html?${q.toString()}" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏠 Preencher BCI →</a>`;
+    }
     case 'quadras':
       return `<div class="popup-title">Quadra ${p.codigo || ''}</div>`
         + row('Bairro', p.bairro || '—') + row('Área', fmtArea(p.area_m2));

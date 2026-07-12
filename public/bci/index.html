@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
+  <title>BzR — Cadastro Imobiliário (BCI)</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { overflow: auto; display: block; }
+    .topbar2 { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: var(--bg-elev); border-bottom: 1px solid var(--line); }
+    .topbar2 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+    .topbar2 .brand img { width: 34px; height: 34px; }
+    .topbar2 .brand strong { font-size: 15px; font-weight: 800; }
+    .topbar2 .brand .accent { color: var(--brand); }
+    .topbar2 .brand small { display: block; color: var(--text-dim); font-size: 10.5px; }
+    .spacer { flex: 1; }
+    .navlink { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 600; padding: 7px 10px; border-radius: 8px; }
+    .navlink:hover { background: var(--bg-elev-2); color: var(--text); }
+    .btn2 { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; border: 1px solid var(--line); background: var(--bg-elev-2); color: var(--text); border-radius: 9px; padding: 8px 12px; font-size: 13px; font-weight: 600; text-decoration: none; }
+    .btn2:hover { border-color: var(--accent); }
+    .btn2.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--brand-ink); border-color: transparent; font-weight: 700; }
+    .wrap { max-width: 1400px; margin: 0 auto; padding: 16px 18px 60px; }
+    .resumo { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .stat { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; min-width: 110px; cursor: pointer; }
+    .stat .v { font-size: 22px; font-weight: 800; }
+    .stat .l { font-size: 11px; color: var(--text-dim); }
+    .stat.on { border-color: var(--accent); }
+    .stat.aprovado .v { color: #6ee7a8; } .stat.enviado .v { color: #7fb5f0; }
+    .stat.rejeitado .v { color: #ef6c60; } .stat.ajuste .v { color: #f6a94a; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+    .layout > * { min-width: 0; }
+    .panel { position: sticky; top: 76px; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .panel { position: static; } }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .toolbar input, .toolbar select { background: var(--bg-elev); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; font-size: 13px; }
+    .toolbar input { min-width: 200px; }
+    .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); }
+    .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .bcard { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; }
+    .bcard:hover { border-color: var(--accent); }
+    .bcard .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .bcard .insc { font-family: ui-monospace, monospace; font-weight: 800; font-size: 14px; }
+    .bcard .loc { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+    .bcard .foot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 11.5px; color: var(--text-dim); }
+    .st-pill { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .3px; }
+    .st-rascunho { background: var(--bg-elev-2); color: var(--text-dim); }
+    .st-enviado { background: rgba(59,130,246,.16); color: #7fb5f0; }
+    .st-aprovado { background: rgba(31,191,99,.15); color: #6ee7a8; }
+    .st-rejeitado { background: rgba(192,57,43,.18); color: #ef6c60; }
+    .st-arquivado { background: rgba(148,163,184,.16); color: #cbd5e1; }
+    .tag-aj { background: rgba(245,169,74,.16); color: #f6a94a; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+    .panel { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+    .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    #mapa { height: 320px; }
+    .leg { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 10px 14px; font-size: 11.5px; color: var(--text-dim); }
+    .leg span { display: inline-flex; align-items: center; gap: 5px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .empty { text-align: center; color: var(--text-dim); padding: 40px 20px; }
+    .leaflet-popup-content-wrapper { background: var(--bg-elev); color: var(--text); border: 1px solid var(--line); }
+    .leaflet-popup-tip { background: var(--bg-elev); }
+  </style>
+</head>
+<body>
+  <header class="topbar2">
+    <a class="brand" href="/"><img src="/assets/bzr-mark.svg" alt="BzR" /><strong>BzR <span class="accent">Cadastro (BCI)</span><small>Boletim de Cadastro Imobiliário</small></strong></a>
+    <div class="spacer"></div>
+    <a class="navlink" href="/">Território</a>
+    <a class="navlink" href="/demandas/">Demandas</a>
+    <a class="btn2 primary" href="/bci/ficha.html">＋ Novo BCI</a>
+  </header>
+
+  <div class="wrap">
+    <div class="resumo" id="resumo"></div>
+    <div class="layout">
+      <div>
+        <div class="toolbar">
+          <input id="q" placeholder="Buscar inscrição…" />
+          <select id="f-status">
+            <option value="">Todos os status</option>
+            <option value="rascunho">Rascunho</option><option value="enviado">Enviado</option>
+            <option value="aprovado">Aprovado</option><option value="rejeitado">Rejeitado</option><option value="arquivado">Arquivado</option>
+          </select>
+          <label class="chk"><input type="checkbox" id="f-ajuste" /> Só com ajuste de geometria</label>
+        </div>
+        <div class="grid-cards" id="lista"></div>
+      </div>
+      <div class="panel">
+        <h3>🗺️ Pontos coletados</h3>
+        <div id="mapa"></div>
+        <div class="leg">
+          <span><i class="dot" style="background:#9AA6A0"></i>Rascunho</span>
+          <span><i class="dot" style="background:#7fb5f0"></i>Enviado</span>
+          <span><i class="dot" style="background:#1FBF63"></i>Aprovado</span>
+          <span><i class="dot" style="background:#ef6c60"></i>Rejeitado</span>
+          <span><i class="dot" style="background:#f6a94a"></i>Ajuste geom.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/bci/app.js"></script>
+</body>
+</html>

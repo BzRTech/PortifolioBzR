@@ -14,6 +14,7 @@
     "seed": "node scripts/seed-demo.js",
     "seed-os": "node scripts/seed-os.js",
     "seed-demandas": "node scripts/seed-demandas.js",
+    "seed-bci": "node scripts/seed-bci.js",
     "import": "node scripts/import-geojson.js",
     "derive-bairros": "node scripts/derive-bairros.js",
     "reset-db": "node scripts/reset-db.js"

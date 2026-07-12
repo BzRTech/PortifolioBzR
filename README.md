@@ -189,6 +189,55 @@ só no momento da sincronização; os dados sincronizados ficam salvos no banco.
 | GET | `/api/waze/config` | Configuração atual do BigQuery (sem expor o token) |
 | GET | `/api/waze/buracos` | Buracos sincronizados (filtros: `dataInicio`, `dataFim`, `minRelatos`, `rua`) |
 
+## Módulo Demandas
+
+Gestão de tarefas internas da equipe (PD/CTM), em `/demandas`: prioridade,
+status (**Pendente → Em andamento → Concluída/Cancelada**), múltiplos
+responsáveis, prazo e vínculo opcional a município/lote. Quatro visões —
+**Quadro (Kanban** com arrastar), **Lista**, **Minhas** e **Calendário** — mais
+resumo e modal de criar/editar. Interface dark e responsiva.
+
+Demonstração: `npm run seed-demandas` (ou `SEED_DEMANDAS_DEMO=true` no boot).
+
+## Módulo Cadastro (BCI)
+
+Coleta de campo do **Boletim de Cadastro Imobiliário**, em `/bci`, vinculada aos
+**lotes** do Território. Formulário **dinâmico e versionável por município**
+(padrão: o BCI oficial de Malta-PB, 9 seções / 68 campos), com **fotos**
+(geral/croqui), **captura de GPS**, **fluxo de aprovação**
+(Rascunho → Enviado → Aprovado/Rejeitado → Arquivado) e o sinal de **ajuste de
+geometria** (o técnico marca que a divisa do lote precisa fundir/desmembrar/
+redesenhar; o coordenador resolve). A lista traz um mapa dos pontos coletados
+coloridos por status, e o popup de cada lote no Território tem um atalho
+"Preencher BCI".
+
+Demonstração: `npm run seed-bci` (ou `SEED_BCI_DEMO=true` no boot).
+
+### Login e perfis (opcional)
+
+Os módulos Demandas e BCI já preveem 3 perfis (**admin/coordenador/técnico**),
+mas o login vem **desligado** por padrão (`AUTH_ENABLED=false`): tudo abre sem
+autenticar e a tabela de usuários serve só como diretório de responsáveis.
+Ligue `AUTH_ENABLED=true` para exigir login (tela `/login`) e aplicar os perfis
+— útil para o fluxo real de aprovação do BCI. Defina também `AUTH_SECRET` e,
+opcionalmente, `ADMIN_EMAIL`/`ADMIN_PASSWORD` (contas de demonstração são
+criadas no primeiro boot).
+
+### API — Demandas e BCI (principais)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET/POST | `/api/demandas` | Lista (filtros) / cria demanda |
+| PUT/DELETE | `/api/demandas/:id` | Atualiza / remove |
+| PATCH | `/api/demandas/:id/status` | Transição de status (Kanban) |
+| GET | `/api/bci/formulario?municipio=` | Definição do formulário (seções/campos) |
+| GET/POST | `/api/bci` | Lista (filtros) / cria BCI |
+| GET/PUT/DELETE | `/api/bci/:id` | Detalhe / atualiza / remove |
+| PATCH | `/api/bci/:id/status` | Fluxo: `enviar`/`aprovar`/`rejeitar`/`arquivar`/`reabrir` |
+| PATCH | `/api/bci/:id/ajuste` | Marca o ajuste de geometria como resolvido |
+| POST/DELETE | `/api/bci/:id/fotos[/:fid]` | Anexa / remove fotos |
+| GET | `/api/bci/mapa` | Pontos coletados (para o mapa) |
+
 ## Deploy no Render
 
 1. Crie um banco no **Neon** e copie a connection string (com `?sslmode=require`).
