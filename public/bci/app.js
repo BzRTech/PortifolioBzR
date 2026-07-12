@@ -20,7 +20,14 @@ async function api(url) {
 let map, renderer, lotesLayer;
 function initMapa() {
   map = L.map('mapa', { zoomControl: true, preferCanvas: true }).setView([-7.12, -34.86], 12);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM &copy; CARTO', subdomains: 'abcd', maxZoom: 20 }).addTo(map);
+
+  // Camadas base (troca pelo controle no canto superior direito).
+  const escuro = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 20 });
+  const claro = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 });
+  const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery &copy; Esri', maxZoom: 20 });
+  escuro.addTo(map);
+  L.control.layers({ 'Mapa escuro': escuro, 'Mapa claro': claro, 'Satélite': satelite }, null, { position: 'topright' }).addTo(map);
+
   renderer = L.canvas({ padding: 0.5 });
   window.addEventListener('resize', () => map.invalidateSize());
   setTimeout(() => map.invalidateSize(), 60);
