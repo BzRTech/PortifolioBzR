@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
+  <title>BzR — Entrar</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    body { overflow: auto; display: grid; place-items: center; min-height: 100vh; }
+    .card {
+      width: min(92vw, 380px); background: var(--bg-elev); border: 1px solid var(--line);
+      border-radius: 16px; box-shadow: var(--shadow); padding: 28px 26px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .brand img { width: 40px; height: 40px; }
+    .brand strong { font-size: 18px; font-weight: 800; }
+    .brand .accent { color: var(--brand); }
+    .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+    label { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; margin: 12px 0 5px; }
+    input {
+      width: 100%; background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 10px; padding: 11px 13px; font-size: 14px;
+    }
+    input:focus { outline: none; border-color: var(--accent); }
+    button {
+      width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 10px; cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--brand-ink);
+      font-weight: 700; font-size: 15px;
+    }
+    button:disabled { opacity: .6; cursor: default; }
+    .erro { color: #fca5a5; font-size: 13px; margin-top: 12px; min-height: 18px; }
+    .demo { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
+    .demo code { background: var(--bg); padding: 1px 6px; border-radius: 5px; color: var(--accent-2); }
+  </style>
+</head>
+<body>
+  <form class="card" id="form">
+    <div class="brand">
+      <img src="/assets/bzr-mark.svg" alt="BzR" />
+      <strong>BzR <span class="accent">Gestão Pública</span></strong>
+    </div>
+    <div class="sub">Entre para acessar Demandas e o Cadastro (BCI).</div>
+
+    <label for="email">E-mail</label>
+    <input type="email" id="email" autocomplete="username" placeholder="voce@prefeitura.gov.br" required />
+
+    <label for="senha">Senha</label>
+    <input type="password" id="senha" autocomplete="current-password" placeholder="••••••••" required />
+
+    <button type="submit" id="btn">Entrar</button>
+    <div class="erro" id="erro"></div>
+
+    <div class="demo">
+      <strong>Contas de demonstração</strong><br />
+      Coordenador: <code>coordenador@bzr.com</code> · senha <code>bzr1234</code><br />
+      Técnico: <code>tecnico@bzr.com</code> · senha <code>bzr1234</code>
+    </div>
+  </form>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const proximo = params.get('next') || '/demandas/';
+    // Já logado? segue direto.
+    if (localStorage.getItem('bzr_token')) location.replace(proximo);
+
+    const f = document.getElementById('form');
+    const erro = document.getElementById('erro');
+    const btn = document.getElementById('btn');
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      erro.textContent = '';
+      btn.disabled = true; btn.textContent = 'Entrando…';
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: document.getElementById('email').value, senha: document.getElementById('senha').value }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Falha no login.');
+        localStorage.setItem('bzr_token', j.token);
+        localStorage.setItem('bzr_user', JSON.stringify(j.user));
+        location.replace(proximo);
+      } catch (err) {
+        erro.textContent = err.message;
+        btn.disabled = false; btn.textContent = 'Entrar';
+      }
+    });
+  </script>
+</body>
+</html>

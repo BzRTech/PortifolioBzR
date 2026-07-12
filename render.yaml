@@ -25,5 +25,16 @@ services:
       # se ainda nao houver nenhuma. Util para apresentar o modulo /os ao cliente.
       - key: SEED_OS_DEMO
         value: "false"
+      # Autenticacao (Demandas / BCI): segredo dos tokens, gerado pelo Render.
+      - key: AUTH_SECRET
+        generateValue: true
+      # Admin criado no primeiro boot. Troque a senha depois de entrar.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Mude para "true" para carregar demandas de demonstracao no boot.
+      - key: SEED_DEMANDAS_DEMO
+        value: "false"
       - key: NODE_VERSION
         value: "22"

@@ -4,6 +4,11 @@
 import pg from 'pg';
 import 'dotenv/config';
 
+// BIGINT (OID 20) vem como string por padrao no pg. Como nossos ids cabem
+// com folga em Number (< 2^53), parseamos para inteiro — assim ids batem em
+// comparacoes/Map no JS (ex.: responsaveis das demandas) sem surpresas.
+pg.types.setTypeParser(20, (v) => (v === null ? null : parseInt(v, 10)));
+
 const { Pool } = pg;
 
 const connectionString = process.env.DATABASE_URL || '';

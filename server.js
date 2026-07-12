@@ -18,6 +18,9 @@ import { seedDemo } from './scripts/seed-demo.js';
 import { seedOsDemo } from './scripts/seed-os.js';
 import { osRouter, ensureOsSchema } from './src/os.js';
 import { IMPORT_LAYERS, insertFeatures, backfillMeasures } from './src/import.js';
+import { authRouter, ensureAuthSchema } from './src/auth.js';
+import { demandasRouter, ensureDemandasSchema } from './src/demandas.js';
+import { seedDemandasDemo } from './scripts/seed-demandas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -42,6 +45,10 @@ if (serveLocalTiles && fs.existsSync(localTilesDir)) {
 
 // ---- Front-end estatico ---------------------------------------------------
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+
+// ---- Autenticacao + modulos protegidos -----------------------------------
+app.use(authRouter);      // /api/auth/*, /api/usuarios
+app.use(demandasRouter);  // /api/demandas/* (exige token)
 
 // ---- Modulo de Ordens de Servico (rotas /api/ordens, /api/waze/*) --------
 app.use(osRouter);
@@ -211,7 +218,9 @@ async function start() {
     try {
       await ensureSchema();
       await ensureOsSchema();
-      console.log('[db] schema verificado (território + ordens de serviço).');
+      await ensureAuthSchema();
+      await ensureDemandasSchema();
+      console.log('[db] schema verificado (território + O.S. + auth + demandas).');
       // Auto-seed opcional: util para um deploy de demonstracao sem shell.
       if (String(process.env.SEED_DEMO || '') === 'true') {
         const counts = await getCounts();
@@ -229,6 +238,15 @@ async function start() {
           console.log('[db] SEED_OS_DEMO=true e sem O.S. — carregando ordens de demonstracao...');
           await seedOsDemo({ truncate: false, log: console.log });
           console.log('[db] seed de O.S. de demonstracao concluido.');
+        }
+      }
+      // Auto-seed das demandas de demonstracao.
+      if (String(process.env.SEED_DEMANDAS_DEMO || '') === 'true') {
+        const { rows } = await query('SELECT COUNT(*)::int AS n FROM demandas');
+        if (rows[0].n === 0) {
+          console.log('[db] SEED_DEMANDAS_DEMO=true e sem demandas — carregando demonstracao...');
+          await seedDemandasDemo({ log: console.log });
+          console.log('[db] seed de demandas de demonstracao concluido.');
         }
       }
     } catch (e) {
