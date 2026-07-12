@@ -173,6 +173,18 @@ bciRouter.get('/api/bci/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Resolve o lote (por codigo = inscricao, no municipio) para vincular o BCI —
+// assim a trava de "um BCI aberto por lote" funciona e o mapa colore certo.
+async function resolverLoteId(inscricao, municipio) {
+  const insc = String(inscricao || '').trim();
+  if (!insc) return null;
+  const params = [insc];
+  let sql = 'SELECT id FROM lotes WHERE codigo = $1';
+  if (municipio) { params.push(String(municipio)); sql += ' AND municipio = $2'; }
+  sql += ' LIMIT 1';
+  try { const { rows } = await query(sql, params); return rows[0]?.id || null; } catch { return null; }
+}
+
 function corpoBci(b, req) {
   return [
     b.loteId || null, String(b.inscricao || '').slice(0, 40), String(b.municipio || ''), String(b.bairro || ''),
@@ -189,6 +201,7 @@ bciRouter.post('/api/bci', async (req, res) => {
   if (!b.inscricao || !String(b.inscricao).trim()) return res.status(400).json({ error: 'Informe a inscrição / código do lote.' });
   const status = b.status === 'enviado' ? 'enviado' : 'rascunho';
   try {
+    if (!b.loteId) b.loteId = await resolverLoteId(b.inscricao, b.municipio);
     const vals = corpoBci(b, req);
     const { rows } = await query(
       `INSERT INTO bci (lote_id, inscricao, municipio, bairro, tecnico_nome, dados,
@@ -210,6 +223,7 @@ bciRouter.put('/api/bci/:id', async (req, res) => {
     const atual = (await query('SELECT status FROM bci WHERE id = $1', [req.params.id])).rows[0];
     if (!atual) return res.status(404).json({ error: 'BCI não encontrado.' });
     if (['aprovado', 'arquivado'].includes(atual.status)) return res.status(409).json({ error: 'BCI aprovado/arquivado não pode ser editado.' });
+    if (!b.loteId) b.loteId = await resolverLoteId(b.inscricao, b.municipio);
     const vals = corpoBci(b, req);
     const { rows } = await query(
       `UPDATE bci SET lote_id=$1, inscricao=$2, municipio=$3, bairro=$4, tecnico_nome=$5, dados=$6::jsonb,
