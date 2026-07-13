@@ -87,6 +87,17 @@
       .side { border-left: none; border-top: 1px solid var(--line); }
       .lista { overflow: visible; }
     }
+    /* Mobile: cabeçalho quebra em linhas (evita itens fora da tela) */
+    @media (max-width: 720px) {
+      .topbar2 { flex-wrap: wrap; padding: 10px 12px; gap: 8px 10px; }
+      .topbar2 .spacer { display: none; }
+      .topbar2 .brand { flex: 1 1 auto; min-width: 0; }
+      .topbar2 .brand small { display: none; }
+      #btn-novo { order: 2; }
+      .fieldm { order: 3; flex: 1 1 100%; }
+      .fieldm select { width: 100%; min-width: 0; }
+      .topbar2 .navlink { order: 4; }
+    }
   </style>
 </head>
 <body>
