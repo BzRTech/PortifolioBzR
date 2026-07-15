@@ -2209,5 +2209,21 @@ function toast(msg, dur = 2200) {
   setTimeout(() => t.remove(), dur);
 }
 </script>
+
+<script src="/js/tour.js"></script>
+<script>
+  BzrTour.init({
+    id: 'os', fabPos: 'bottom-left',
+    title: 'Ordens de Serviço', emoji: '🛠️',
+    intro: 'Aqui a Secretaria de Infraestrutura registra e acompanha as O.S. Quer um tour rápido?',
+    steps: [
+      { sel: '.stats-bar', title: 'Resumo por status', text: 'Total de ordens e quantas estão abertas, em andamento e concluídas — sempre à vista.' },
+      { sel: '.nav-tabs', title: 'As três abas', text: 'Ordens (a lista), Nova (abrir uma O.S.) e Relatório (dashboards e importação).' },
+      { sel: '.fab', title: 'Abrir uma O.S.', text: 'O botão “+” cria uma nova ordem: tipo, endereço, prioridade, fotos e responsáveis.' },
+      { sel: '#tab-relatorio', title: 'Relatórios e importação', text: 'Na aba Relatório você importa buracos do Waze por CSV e abre os dashboards (inclusive o mapa do Waze).' },
+      { sel: null, title: 'Pronto! 🎉', text: 'Clique em “🎓 Tour” quando quiser rever.' },
+    ],
+  });
+</script>
 </body>
 </html>

@@ -136,5 +136,21 @@
   <script src="/vendor/leaflet.heat/leaflet-heat.js"></script>
   <script src="/vendor/chart/chart.umd.js"></script>
   <script type="module" src="/js/app.js"></script>
+
+  <script src="/js/tour.js"></script>
+  <script>
+    BzrTour.init({
+      id: 'territorio', fabPos: 'bottom-left',
+      title: 'Bem-vindo ao BzR',
+      intro: 'Este é o seu WebGIS de gestão pública. Quer um tour rápido mostrando tudo que dá pra fazer? Leva menos de 1 minuto.',
+      steps: [
+        { sel: '#map', title: 'O mapa da cidade', text: 'Aqui estão as ruas, lotes e edificações do município. As ruas ficam verdes (pavimentadas) ou vermelhas (sem pavimento).' },
+        { sel: '#controls', title: 'Ligue e desligue camadas', text: 'Escolha o que aparece no mapa — bairros, quadras, lotes, ruas — troque o mapa de fundo e ative o mapa de calor.' },
+        { sel: '#dashboard', title: 'Painel do Gestor', text: 'Os números que importam, resumidos: km de vias, % pavimentado, total de lotes e edificações. Atualiza sozinho com os dados.' },
+        { sel: 'a[href="/bci/"]', title: 'Não é só mapa', text: 'Clique num lote para preencher o Cadastro (BCI). Há também Demandas da equipe e Ordens de Serviço — tudo integrado, aqui em cima.' },
+        { sel: null, title: 'Pronto! 🎉', text: 'É isso. Quando quiser rever, clique no botão “🎓 Tour” no canto da tela.' },
+      ],
+    });
+  </script>
 </body>
 </html>

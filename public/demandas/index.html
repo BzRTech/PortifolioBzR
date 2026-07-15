@@ -225,5 +225,21 @@
   </div>
 
   <script src="/demandas/app.js"></script>
+
+  <script src="/js/tour.js"></script>
+  <script>
+    BzrTour.init({
+      id: 'demandas', fabPos: 'bottom-right',
+      title: 'Gestão de Demandas', emoji: '🗂️',
+      intro: 'Aqui a equipe organiza as tarefas (PD/CTM). Quer um tour rápido?',
+      steps: [
+        { sel: '#resumo', title: 'Visão geral', text: 'De relance: quantas demandas estão abertas, quantas atrasadas e quantas já foram concluídas.' },
+        { sel: '#views', title: 'Quatro formas de ver', text: 'Alterne entre Quadro (Kanban), Lista, Minhas demandas e Calendário — do jeito que ficar melhor para você.' },
+        { sel: '#view', title: 'Arraste para mudar o status', text: 'No Quadro, arraste um card entre as colunas (Pendente → Em andamento → Concluída). Clique num card para editar.' },
+        { sel: '#btn-nova', title: 'Nova demanda', text: 'Crie uma tarefa, defina prioridade, prazo, equipe e os responsáveis.' },
+        { sel: null, title: 'Pronto! 🎉', text: 'Clique em “🎓 Tour” a qualquer momento para rever.' },
+      ],
+    });
+  </script>
 </body>
 </html>

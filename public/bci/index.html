@@ -140,5 +140,21 @@
 
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/bci/app.js"></script>
+
+  <script src="/js/tour.js"></script>
+  <script>
+    BzrTour.init({
+      id: 'bci', fabPos: 'bottom-right',
+      title: 'Cadastro Imobiliário (BCI)', emoji: '🏠',
+      intro: 'Aqui você faz o Boletim de Cadastro Imobiliário dos lotes. Quer ver como funciona?',
+      steps: [
+        { sel: '#mapa', title: 'Os lotes da cidade', text: 'Cada lote aparece no mapa, colorido pelo status do cadastro. Clique num lote para começar (ou abrir) o BCI dele.' },
+        { sel: '#resumo', title: 'Resumo do cadastro', text: 'Quantos BCIs aguardam aprovação, quantos foram aprovados e quantos lotes precisam de ajuste de geometria.' },
+        { sel: '#lista', title: 'Lista de BCIs', text: 'Todos os boletins. Clique num item para o mapa voar até o lote; use “Abrir” para ver/editar o formulário.' },
+        { sel: '#btn-novo', title: 'Novo BCI', text: 'Também dá para começar um cadastro do zero por aqui, digitando a inscrição do lote.' },
+        { sel: null, title: 'Fluxo de aprovação', text: 'Cada BCI segue: Rascunho → Enviado → Aprovado (ou Rejeitado). O técnico coleta; a coordenação valida. Bom trabalho! 🎉' },
+      ],
+    });
+  </script>
 </body>
 </html>
