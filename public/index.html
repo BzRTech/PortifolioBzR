@@ -6,7 +6,7 @@
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR Território — Gestão Territorial Municipal</title>
   <meta name="description" content="WebGIS municipal: lotes, quadras, ruas e edificações com dashboard de gestão, mapa de calor e ortofoto." />
-
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
@@ -32,9 +32,9 @@
       <button id="btn-dashboard" class="btn btn-primary" aria-pressed="true">
         <span class="ico">▦</span> <span class="btn-label">Dashboard</span>
       </button>
-      <a class="btn" href="/importar" title="Importar GeoJSON">
-        <span class="ico">⬆</span> <span class="btn-label">Importar</span>
-      </a>
+      <button class="btn btn-primary" aria-pressed="true" title="Território">
+        <span class="ico">🗺</span> <span class="btn-label">Território</span>
+      </button>
       <a class="btn" href="/demandas/" title="Gestão de Demandas">
         <span class="ico">🗂</span> <span class="btn-label">Demandas</span>
       </a>
@@ -44,6 +44,7 @@
       <a class="btn" href="/os/" title="Ordens de Serviço">
         <span class="ico">🛠</span> <span class="btn-label">Ordens de Serviço</span>
       </a>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
     </div>
   </header>
 
@@ -137,6 +138,7 @@
   <script src="/vendor/chart/chart.umd.js"></script>
   <script type="module" src="/js/app.js"></script>
 
+  <script src="/js/theme.js"></script>
   <script src="/js/tour.js"></script>
   <script>
     BzrTour.init({
@@ -148,7 +150,7 @@
         { sel: '#controls', title: 'Ligue e desligue camadas', text: 'Escolha o que aparece no mapa — bairros, quadras, lotes, ruas — troque o mapa de fundo e ative o mapa de calor.' },
         { sel: '#dashboard', title: 'Painel do Gestor', text: 'Os números que importam, resumidos: km de vias, % pavimentado, total de lotes e edificações. Atualiza sozinho com os dados.' },
         { sel: 'a[href="/bci/"]', title: 'Não é só mapa', text: 'Clique num lote para preencher o Cadastro (BCI). Há também Demandas da equipe e Ordens de Serviço — tudo integrado, aqui em cima.' },
-        { sel: null, title: 'Pronto! 🎉', text: 'É isso. Quando quiser rever, clique no botão “🎓 Tour” no canto da tela.' },
+        { sel: null, title: 'Pronto! 🎉', text: 'É isso. Quando quiser rever, clique no botão "🎓 Tour" no canto da tela.' },
       ],
     });
   </script>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR — Entrar</title>
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
   <link rel="stylesheet" href="/styles.css" />
   <style>
     body {
@@ -75,9 +76,17 @@
       background: var(--paper-2); padding: 1px 6px;
       font-family: var(--font-mono); font-size: 11px; color: var(--ink);
     }
+    .btn-theme-float {
+      position: fixed; top: 14px; right: 14px;
+      background: var(--card); border: 1px solid var(--line); color: var(--ink);
+      padding: 8px 10px; font-size: 16px; line-height: 1; cursor: pointer;
+    }
+    .btn-theme-float:hover { border-color: var(--ink); }
   </style>
 </head>
 <body>
+  <button class="btn-theme-float" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro">🌙</button>
+
   <form class="card" id="form">
     <span class="chip">Acesso</span>
 
@@ -111,6 +120,7 @@
     </div>
   </form>
 
+  <script src="/js/theme.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const proximo = params.get('next') || '/demandas/';
