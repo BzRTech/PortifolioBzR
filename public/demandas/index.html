@@ -9,23 +9,6 @@
   <link rel="stylesheet" href="/styles.css" />
   <style>
     body { overflow: auto; display: block; }
-    .topbar2 {
-      position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px;
-      padding: 12px 18px; background: var(--bg-elev); border-bottom: 1px solid var(--line);
-      position: sticky;
-    }
-    .topbar2::before {
-      content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--accent);
-    }
-    .topbar2 .brand { display: flex; align-items: center; gap: 10px; }
-    .topbar2 .brand img { width: 34px; height: 34px; }
-    .topbar2 .brand strong { font-size: 15px; font-weight: 700; }
-    .topbar2 .brand small { display: block; color: var(--text-dim); font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
-    .spacer { flex: 1; }
-    .navlink { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500; padding: 7px 10px; }
-    .navlink:hover { color: var(--text); border-bottom: 1px solid var(--line-2); }
-    .userchip { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
-    .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; background: var(--accent); }
     .btn2 { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; border: 1px solid var(--line-2); background: var(--bg-elev); color: var(--text); padding: 8px 12px; font-size: 13px; font-weight: 500; font-family: var(--font-ui); }
     .btn2:hover { border-color: var(--ink); }
     .btn2.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 600; }
@@ -118,10 +101,6 @@
     .empty { text-align: center; color: var(--text-dim); padding: 40px 20px; font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
     .req { color: var(--danger); }
     @media (max-width: 720px) {
-      .topbar2 { flex-wrap: wrap; gap: 8px 10px; padding: 10px 12px; }
-      .topbar2 .spacer { display: none; }
-      .topbar2 .brand { flex: 1 1 auto; min-width: 0; }
-      .topbar2 .brand small { display: none; }
       .wrap { padding: 12px 12px 60px; }
       .views { flex: 1 1 100%; overflow-x: auto; }
       .toolbar .filtro { flex: 1 1 auto; }
@@ -131,18 +110,22 @@
   </style>
 </head>
 <body>
-  <header class="topbar2">
+  <header class="topbar">
     <a class="brand" href="/" style="text-decoration:none;color:inherit">
-      <img src="/assets/bzr-mark.svg" alt="BzR" />
-      <strong>BzR <span class="accent">Demandas</span><small>Gestão de projeto · PD / CTM</small></strong>
+      <img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
+      <div class="brand-text">
+        <strong>BzR <span class="brand-accent">Território</span></strong>
+        <small>Geoprocessamento + Software para Gestão Pública</small>
+      </div>
     </a>
-    <div class="spacer"></div>
-    <a class="navlink" href="/">Território</a>
-    <a class="navlink" href="/bci/">Cadastro (BCI)</a>
-    <a class="navlink" href="/os/">Ordens de Serviço</a>
-    <div class="userchip" id="userchip"></div>
-    <button class="btn2" id="btn-logout" title="Sair">Sair</button>
-    <button class="btn2" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:8px 10px;font-size:15px;line-height:1">🌙</button>
+    <div class="top-actions">
+      <a class="btn" href="/importar" title="Importar GeoJSON"><span class="ico">⬆</span> <span class="btn-label">Importar</span></a>
+      <a class="btn" href="/bci/" title="Cadastro Imobiliário (BCI)"><span class="ico">🏠</span> <span class="btn-label">Cadastro (BCI)</span></a>
+      <a class="btn" href="/os/" title="Ordens de Serviço"><span class="ico">🛠</span> <span class="btn-label">Ordens de Serviço</span></a>
+      <div class="userchip" id="userchip"></div>
+      <button class="btn" id="btn-logout" title="Sair">Sair</button>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
+    </div>
   </header>
 
   <div class="wrap">

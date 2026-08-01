@@ -11,21 +11,6 @@
   <style>
     html, body { height: 100%; }
     body { overflow: hidden; display: flex; flex-direction: column; }
-    .topbar2 { position: relative; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 11px 18px; background: var(--bg-elev); border-bottom: 1px solid var(--line); z-index: 60; }
-    .topbar2::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--accent); }
-    .topbar2 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
-    .topbar2 .brand img { width: 32px; height: 32px; }
-    .topbar2 .brand strong { font-size: 15px; font-weight: 700; }
-    .topbar2 .brand small { display: block; color: var(--text-dim); font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
-    .spacer { flex: 1; }
-    .fieldm { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim); }
-    .fieldm select { background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line); border-radius: 0; padding: 7px 10px; font-size: 13px; min-width: 160px; font-family: var(--font-ui); }
-    .navlink { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500; padding: 7px 10px; }
-    .navlink:hover { color: var(--text); }
-    .btn2 { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; border: 1px solid var(--line-2); background: var(--bg-elev); color: var(--text); padding: 8px 12px; font-size: 13px; font-weight: 500; text-decoration: none; font-family: var(--font-ui); }
-    .btn2:hover { border-color: var(--ink); }
-    .btn2.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 600; }
-    .btn2.primary:hover { background: var(--accent); color: #fff; border-color: #178a48; }
 
     /* Layout principal */
     .main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; }
@@ -87,27 +72,28 @@
       .side { border-left: none; border-top: 1px solid var(--line); }
       .lista { overflow: visible; }
     }
-    @media (max-width: 720px) {
-      .topbar2 { flex-wrap: wrap; padding: 10px 12px; gap: 8px 10px; }
-      .topbar2 .spacer { display: none; }
-      .topbar2 .brand { flex: 1 1 auto; min-width: 0; }
-      .topbar2 .brand small { display: none; }
-      #btn-novo { order: 2; }
-      .fieldm { order: 3; flex: 1 1 100%; }
-      .fieldm select { width: 100%; min-width: 0; }
-      .topbar2 .navlink { order: 4; }
-    }
   </style>
 </head>
 <body>
-  <header class="topbar2">
-    <a class="brand" href="/"><img src="/assets/bzr-mark.svg" alt="BzR" /><strong>BzR <span class="accent">Cadastro (BCI)</span><small>Boletim de Cadastro Imobiliário</small></strong></a>
-    <label class="fieldm"><span>Município</span><select id="municipio"></select></label>
-    <div class="spacer"></div>
-    <a class="navlink" href="/">Território</a>
-    <a class="navlink" href="/demandas/">Demandas</a>
-    <a class="btn2 primary" id="btn-novo" href="/bci/ficha.html">＋ Novo BCI</a>
-    <button class="btn2" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:8px 10px;font-size:15px;line-height:1">🌙</button>
+  <header class="topbar">
+    <a class="brand" href="/" style="text-decoration:none;color:inherit">
+      <img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
+      <div class="brand-text">
+        <strong>BzR <span class="brand-accent">Território</span></strong>
+        <small>Geoprocessamento + Software para Gestão Pública</small>
+      </div>
+    </a>
+    <div class="top-actions">
+      <label class="field">
+        <span>Município</span>
+        <select id="municipio"></select>
+      </label>
+      <a class="btn" href="/importar" title="Importar GeoJSON"><span class="ico">⬆</span> <span class="btn-label">Importar</span></a>
+      <a class="btn" href="/demandas/" title="Gestão de Demandas"><span class="ico">🗂</span> <span class="btn-label">Demandas</span></a>
+      <a class="btn" href="/os/" title="Ordens de Serviço"><span class="ico">🛠</span> <span class="btn-label">Ordens de Serviço</span></a>
+      <a class="btn btn-primary" id="btn-novo" href="/bci/ficha.html" aria-pressed="true">＋ <span class="btn-label">Novo BCI</span></a>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
+    </div>
   </header>
 
   <div class="main">
