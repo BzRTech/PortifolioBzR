@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR Território — Importar dados</title>
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
   <link rel="stylesheet" href="/styles.css" />
   <style>
     body { overflow: auto; display: block; }
@@ -96,6 +97,7 @@
         <small>Carregue seus GeoJSON (lotes, quadras, ruas, edificações, bairros)</small>
       </div>
       <a class="btn back btn-link" href="/">← Voltar ao mapa</a>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
     </div>
 
     <p class="lead">
@@ -152,6 +154,7 @@
     </div>
   </div>
 
+  <script src="/js/theme.js"></script>
   <script>
     const LAYER_LABELS = {
       bairros: 'Bairros', quadras: 'Quadras', lotes: 'Lotes',

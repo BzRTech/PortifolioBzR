@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR — Cadastro Imobiliário (BCI)</title>
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
   <style>
@@ -106,6 +107,7 @@
     <a class="navlink" href="/">Território</a>
     <a class="navlink" href="/demandas/">Demandas</a>
     <a class="btn2 primary" id="btn-novo" href="/bci/ficha.html">＋ Novo BCI</a>
+    <button class="btn2" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:8px 10px;font-size:15px;line-height:1">🌙</button>
   </header>
 
   <div class="main">
@@ -137,6 +139,7 @@
   </div>
 
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/theme.js"></script>
   <script src="/bci/app.js"></script>
 
   <script src="/js/tour.js"></script>
