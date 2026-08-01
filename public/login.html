@@ -7,52 +7,105 @@
   <title>BzR — Entrar</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
-    body { overflow: auto; display: grid; place-items: center; min-height: 100vh; }
+    body {
+      overflow: auto; display: grid; place-items: center;
+      min-height: 100vh; background: var(--paper-2);
+    }
     .card {
-      width: min(92vw, 380px); background: var(--bg-elev); border: 1px solid var(--line);
-      border-radius: 16px; box-shadow: var(--shadow); padding: 28px 26px;
+      width: min(92vw, 420px);
+      background: var(--card); border: 1px solid var(--line);
+      border-top: 4px solid var(--accent);
+      box-shadow: var(--shadow); padding: 36px 32px 32px;
+      display: flex; flex-direction: column;
     }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
-    .brand img { width: 40px; height: 40px; }
-    .brand strong { font-size: 18px; font-weight: 800; }
-    .brand .accent { color: var(--brand); }
-    .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
-    label { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; margin: 12px 0 5px; }
+    .chip {
+      display: inline-block; align-self: start;
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: .16em;
+      text-transform: uppercase; color: #fff; background: var(--accent);
+      padding: 3px 8px; margin-bottom: 20px;
+    }
+    .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+    .brand-row img { width: 36px; height: 36px; }
+    .brand-col { display: flex; flex-direction: column; line-height: 1.2; }
+    .brand-col strong { font-size: 17px; font-weight: 700; }
+    .brand-col small {
+      color: var(--muted); font-size: 10px; letter-spacing: .12em;
+      font-family: var(--font-mono); text-transform: uppercase;
+    }
+    .sub { color: var(--muted); font-size: 13px; margin: 8px 0 28px; line-height: 1.55; }
+    .field-k {
+      display: block; font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+      margin: 16px 0 0;
+    }
+    .field-k:first-of-type { margin-top: 0; }
+    .field-wrap {
+      display: flex; align-items: center;
+      border-bottom: 1px solid var(--line-2); padding: 10px 0;
+      transition: border-color .15s;
+    }
+    .field-wrap:focus-within { border-color: var(--ink); }
     input {
-      width: 100%; background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
-      border-radius: 10px; padding: 11px 13px; font-size: 14px;
+      width: 100%; border: 0; background: transparent; outline: none;
+      font-family: var(--font-ui); font-size: 15px; color: var(--ink);
     }
-    input:focus { outline: none; border-color: var(--accent); }
-    button {
-      width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 10px; cursor: pointer;
-      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--brand-ink);
-      font-weight: 700; font-size: 15px;
+    input::placeholder { color: var(--muted); }
+    .btn-submit {
+      width: 100%; margin-top: 28px; padding: 13px;
+      border: 0; background: var(--ink); color: var(--paper);
+      font-family: var(--font-ui); font-weight: 600; font-size: 15px; cursor: pointer;
+      transition: background .15s;
     }
-    button:disabled { opacity: .6; cursor: default; }
-    .erro { color: #fca5a5; font-size: 13px; margin-top: 12px; min-height: 18px; }
-    .demo { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
-    .demo code { background: var(--bg); padding: 1px 6px; border-radius: 5px; color: var(--accent-2); }
+    .btn-submit:hover { background: var(--accent); color: #fff; }
+    .btn-submit:disabled { opacity: .6; cursor: default; }
+    .btn-submit:disabled:hover { background: var(--ink); color: var(--paper); }
+    .erro {
+      font-family: var(--font-mono); font-size: 12px; color: var(--danger);
+      margin-top: 10px; min-height: 18px;
+    }
+    .demo {
+      margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line);
+      font-size: 11.5px; color: var(--muted); line-height: 1.7;
+    }
+    .demo-k {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--ink-2); display: block; margin-bottom: 4px;
+    }
+    .demo code {
+      background: var(--paper-2); padding: 1px 6px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--ink);
+    }
   </style>
 </head>
 <body>
   <form class="card" id="form">
-    <div class="brand">
+    <span class="chip">Acesso</span>
+
+    <div class="brand-row">
       <img src="/assets/bzr-mark.svg" alt="BzR" />
-      <strong>BzR <span class="accent">Gestão Pública</span></strong>
+      <div class="brand-col">
+        <strong>BzR <em>Gestão Pública</em></strong>
+        <small>Plataforma territorial</small>
+      </div>
     </div>
-    <div class="sub">Entre para acessar Demandas e o Cadastro (BCI).</div>
 
-    <label for="email">E-mail</label>
-    <input type="email" id="email" autocomplete="username" placeholder="voce@prefeitura.gov.br" required />
+    <p class="sub">Entre para acessar Demandas e o Cadastro (BCI).</p>
 
-    <label for="senha">Senha</label>
-    <input type="password" id="senha" autocomplete="current-password" placeholder="••••••••" required />
+    <label class="field-k" for="email">E-mail</label>
+    <div class="field-wrap">
+      <input type="email" id="email" autocomplete="username" placeholder="voce@prefeitura.gov.br" required />
+    </div>
 
-    <button type="submit" id="btn">Entrar</button>
+    <label class="field-k" for="senha">Senha</label>
+    <div class="field-wrap">
+      <input type="password" id="senha" autocomplete="current-password" placeholder="••••••••" required />
+    </div>
+
+    <button type="submit" class="btn-submit" id="btn">Entrar</button>
     <div class="erro" id="erro"></div>
 
     <div class="demo">
-      <strong>Contas de demonstração</strong><br />
+      <span class="demo-k">Contas de demonstração</span>
       Coordenador: <code>coordenador@bzr.com</code> · senha <code>bzr1234</code><br />
       Técnico: <code>tecnico@bzr.com</code> · senha <code>bzr1234</code>
     </div>
@@ -61,7 +114,6 @@
   <script>
     const params = new URLSearchParams(location.search);
     const proximo = params.get('next') || '/demandas/';
-    // Já logado? segue direto.
     if (localStorage.getItem('bzr_token')) location.replace(proximo);
 
     const f = document.getElementById('form');

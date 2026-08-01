@@ -7,55 +7,58 @@
   <title>BzR Território — Importar dados</title>
   <link rel="stylesheet" href="/styles.css" />
   <style>
-    /* Pagina de importacao — reaproveita as variaveis de cor do styles.css */
     body { overflow: auto; display: block; }
     .wrap { max-width: 860px; margin: 0 auto; padding: 22px 18px 60px; }
     .page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
     .page-head img { width: 40px; height: 40px; }
-    .page-head h1 { font-size: 20px; margin: 0; font-weight: 800; letter-spacing: .3px; }
-    .page-head .brand-accent { color: var(--brand); }
+    .page-head h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .2px; }
     .page-head small { color: var(--text-dim); font-size: 12px; }
     .back { margin-left: auto; }
     .lead { color: var(--text-dim); font-size: 13.5px; line-height: 1.5; margin: 4px 0 20px; }
     .panel-box {
       background: var(--bg-elev); border: 1px solid var(--line);
-      border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+      border-top: 3px solid var(--line-2);
+      padding: 18px; margin-bottom: 16px;
     }
-    .panel-box h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-dim); margin: 0 0 14px; }
+    .panel-box h2 {
+      font-size: 10px; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--text-dim); margin: 0 0 14px;
+      font-family: var(--font-mono);
+    }
     .row { display: flex; gap: 14px; flex-wrap: wrap; }
     .fld { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
-    .fld label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+    .fld label { font-size: 12px; color: var(--text-dim); font-weight: 600; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .1em; font-size: 10px; }
     .fld input[type="text"], .fld input[type="password"] {
       background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
-      border-radius: 9px; padding: 9px 11px; font-size: 14px;
+      border-radius: 0; padding: 9px 11px; font-size: 14px; font-family: var(--font-ui);
     }
-    .fld input:focus { outline: none; border-color: var(--accent); }
+    .fld input:focus { outline: none; border-color: var(--ink); }
     .hint { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
     .modes { display: flex; gap: 18px; margin-top: 4px; }
     .modes label { display: flex; align-items: center; gap: 7px; font-size: 13.5px; cursor: pointer; }
     input[type="radio"], input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
 
     .dropzone {
-      border: 2px dashed var(--line); border-radius: var(--radius);
+      border: 2px dashed var(--line); border-radius: 0;
       padding: 34px 18px; text-align: center; cursor: pointer;
       transition: .15s; background: var(--bg-elev-2);
     }
-    .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(31,191,99,.06); }
+    .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(31,191,99,.07); }
     .dropzone .ic { font-size: 34px; }
     .dropzone .t { font-weight: 700; margin-top: 8px; }
     .dropzone .s { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
 
     table.files { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
-    table.files th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    table.files th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--text-dim); padding: 6px 8px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); }
     table.files td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
     table.files .fn { font-weight: 600; word-break: break-all; }
     table.files select {
       background: var(--bg-elev-2); color: var(--text); border: 1px solid var(--line);
-      border-radius: 8px; padding: 6px 8px; font-size: 13px;
+      border-radius: 0; padding: 6px 8px; font-size: 13px; font-family: var(--font-ui);
     }
     .num { font-variant-numeric: tabular-nums; }
-    .rm { background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 6px; }
-    .rm:hover { background: var(--bg-elev-2); color: var(--danger); }
+    .rm { background: transparent; border: 1px solid transparent; color: var(--text-dim); cursor: pointer; font-size: 16px; padding: 2px 6px; }
+    .rm:hover { border-color: var(--line); color: var(--danger); }
 
     .st { font-size: 12px; font-weight: 700; }
     .st.pending { color: var(--text-dim); }
@@ -66,17 +69,21 @@
     .miniprog > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
     .actions { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-    .prog-overall { flex: 1; height: 10px; background: var(--bg-elev-2); border-radius: 6px; overflow: hidden; }
-    .prog-overall > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+    .prog-overall { flex: 1; height: 10px; background: var(--bg-elev-2); overflow: hidden; }
+    .prog-overall > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
-    .log { background: #060a07; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--text-dim); max-height: 240px; overflow: auto; white-space: pre-wrap; }
-    .log b { color: var(--text); }
-    .log .ok { color: var(--ok); }
-    .log .err { color: var(--danger); }
-    .banner { border-radius: 10px; padding: 11px 14px; font-size: 13px; margin-bottom: 14px; display: none; }
+    .log {
+      background: #0e0f10; border: 1px solid var(--line-2); padding: 12px 14px;
+      font-family: var(--font-mono); font-size: 12.5px; color: #9a978c;
+      max-height: 240px; overflow: auto; white-space: pre-wrap;
+    }
+    .log b { color: #f3f1ea; }
+    .log .ok { color: #6ee7a8; }
+    .log .err { color: #ef6c60; }
+    .banner { padding: 11px 14px; font-size: 13px; margin-bottom: 14px; display: none; border: 1px solid; }
     .banner.show { display: block; }
-    .banner.warn { background: rgba(251,146,60,.12); color: #fdba74; border: 1px solid rgba(251,146,60,.3); }
-    .banner.err { background: rgba(192,57,43,.14); color: #f3b6b1; border: 1px solid rgba(192,57,43,.4); }
+    .banner.warn { background: rgba(163,106,16,.08); color: var(--warn); border-color: rgba(163,106,16,.3); }
+    .banner.err { background: rgba(180,53,30,.08); color: var(--danger); border-color: rgba(180,53,30,.3); }
     a.btn-link { text-decoration: none; }
   </style>
 </head>
@@ -168,7 +175,7 @@
       modeHint: document.getElementById('modeHint'),
     };
 
-    let files = []; // { file, name, layer, features|null, count, status, prog }
+    let files = [];
 
     function detectLayer(name) {
       const f = name.toLowerCase();
@@ -252,7 +259,6 @@
         const entry = { file, name: file.name, layer: detectLayer(file.name), features: null, count: null, status: 'pending', prog: 0 };
         files.push(entry);
         renderTable();
-        // Le e parseia em background para mostrar a contagem.
         readAndParse(entry).then(renderTable).catch((err) => {
           entry.status = 'err'; entry.error = 'JSON inválido'; entry.count = 0;
           logLine(`<span class="err">✕ ${entry.name}: não foi possível ler (${err.message})</span>`);
@@ -352,7 +358,6 @@
         }
       }
 
-      // Recalcula áreas/extensões de cada camada tocada.
       logLine(`\n<b>Finalizando (áreas/extensões)…</b>`);
       for (const layer of layersTouched) {
         try {
@@ -372,7 +377,6 @@
       els.btnImport.disabled = false;
     }
 
-    // ---- eventos ----
     els.dropzone.addEventListener('click', () => els.fileInput.click());
     els.fileInput.addEventListener('change', (e) => { addFiles(e.target.files); els.fileInput.value = ''; });
     ['dragover', 'dragenter'].forEach((ev) => els.dropzone.addEventListener(ev, (e) => { e.preventDefault(); els.dropzone.classList.add('drag'); }));
