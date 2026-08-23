@@ -88,7 +88,7 @@
         <h1>BzR <span class="brand-accent">Território</span> — Importar dados</h1>
         <small>Carregue seus GeoJSON (lotes, quadras, ruas, edificações, bairros)</small>
       </div>
-      <a class="btn back btn-link" href="/">← Voltar ao mapa</a>
+      <a class="btn back btn-link" href="/territorio">← Voltar ao mapa</a>
     </div>
 
     <p class="lead">
@@ -366,7 +366,7 @@
       els.progOverall.style.width = '100%';
       const okCount = ready.filter((f) => f.status === 'done').length;
       logLine(`\n<b class="ok">Concluído.</b> ${okCount}/${ready.length} arquivo(s) importado(s).`);
-      showBanner('warn', 'Importação concluída. Abra o <a href="/" style="color:inherit;text-decoration:underline">mapa</a> para conferir os dados.');
+      showBanner('warn', 'Importação concluída. Abra o <a href="/territorio" style="color:inherit;text-decoration:underline">mapa</a> para conferir os dados.');
       els.banner.className = 'banner show warn';
       els.municipio.disabled = false;
       els.btnImport.disabled = false;

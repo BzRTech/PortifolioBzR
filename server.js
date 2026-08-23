@@ -46,7 +46,15 @@ if (serveLocalTiles && fs.existsSync(localTilesDir)) {
 }
 
 // ---- Front-end estatico ---------------------------------------------------
+// "/" e a landing institucional (public/index.html); o WebGIS de Territorio
+// passou para "/territorio" (public/territorio.html, servido pelo static
+// abaixo por causa de extensions: ['html']).
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
+
+// Atalhos antigos/intuitivos para a pagina principal.
+app.get(['/home', '/landing'], (req, res) => res.redirect(301, '/'));
+// Quem tinha "/" salvo como o mapa continua chegando la.
+app.get('/mapa', (req, res) => res.redirect(301, '/territorio'));
 
 // ---- Autenticacao + modulos protegidos -----------------------------------
 app.use(authRouter);      // /api/auth/*, /api/usuarios

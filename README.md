@@ -4,7 +4,9 @@ Plataforma da **BzR Technology** (geoprocessamento + software) para gestão
 pública municipal. Reúne, num único sistema, os dois módulos que antes
 viviam em repositórios separados:
 
-- **[Território](#módulo-território)** (`/`) — WebGIS de **lotes, quadras,
+- **Landing institucional** (`/`) — página pública de apresentação da
+  plataforma (recursos, módulos municipais, diferenciais e contato).
+- **[Território](#módulo-território)** (`/territorio`) — WebGIS de **lotes, quadras,
   ruas, edificações e bairros**, com mapa de calor, ortofoto e um dashboard
   de gestão territorial.
 - **[Ordens de Serviço](#módulo-ordens-de-serviço)** (`/os`) — gestão de
@@ -50,7 +52,8 @@ scripts/
   derive-bairros.js     # bairros a partir de quadras/lotes (npm run derive-bairros)
   reset-db.js           # limpa todas as tabelas   (npm run reset-db)
 public/
-  index.html, styles.css, js/, vendor/, assets/   # módulo Território (raiz do site)
+  index.html                                      # landing institucional (raiz do site)
+  territorio.html, styles.css, js/, vendor/, assets/  # módulo Território (/territorio)
   os/                                             # módulo Ordens de Serviço (/os)
 data/                   # coloque aqui seus .geojson (ver data/README.md)
 tiles/                  # tiles XYZ da ortofoto (ver tiles/README.md)
@@ -66,7 +69,7 @@ npm install
 cp .env.example .env        # edite e cole a DATABASE_URL do Neon
 npm run init-db             # cria extensão PostGIS, tabelas e índices (Território)
 npm run seed                # (opcional) carrega a cidade de demonstração
-npm start                   # http://localhost:3000  (Território)  e  /os  (Ordens de Serviço)
+npm start                   # http://localhost:3000  (landing), /territorio  e  /os
 ```
 
 As tabelas do módulo de Ordens de Serviço (`ordens_servico`, `waze_buracos`)
