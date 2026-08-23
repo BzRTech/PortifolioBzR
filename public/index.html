@@ -32,6 +32,13 @@ a{color:var(--green);text-decoration:none}a:hover{color:var(--green-d)}
 .btn.onink{background:#fff;color:var(--ink)}.btn.onink:hover{background:var(--paper);color:var(--ink)}
 .btn.onwhite{border-color:rgba(255,255,255,.5);color:#fff}.btn.onwhite:hover{border-color:#fff;color:#fff;background:rgba(255,255,255,.1)}
 .ctaacts{display:flex;flex-wrap:wrap;gap:12px}
+.ctaside{display:flex;flex-direction:column;gap:18px;align-items:flex-start}
+.qr{display:flex;align-items:center;gap:16px;background:#fff;color:var(--ink);padding:14px 20px 14px 14px;border-radius:0 18px 0 0;transition:.16s}
+.qr:hover{color:var(--ink);box-shadow:0 8px 26px rgba(10,11,10,.18)}
+.qr img{width:104px;height:104px;display:block;flex:none}
+.qr .txt{display:flex;flex-direction:column;gap:3px}
+.qr .txt b{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.qr .txt span{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
 .wa{position:fixed;right:26px;bottom:26px;z-index:40;display:flex;align-items:center;gap:10px;background:var(--ink);color:#fff;padding:14px 18px;border-radius:0 16px 0 0;font-size:14px;font-weight:600;letter-spacing:-.01em;box-shadow:0 8px 26px rgba(10,11,10,.22);transition:.16s}
 .wa:hover{background:var(--green);color:#fff}
 .wa .d{width:8px;height:8px;background:var(--green);border-radius:0 4px 0 0;flex:none;animation:blink 1.05s steps(1) infinite}
@@ -135,8 +142,8 @@ footer .col{display:flex;flex-direction:column;gap:9px}
 footer .col a{font-size:14.5px;color:rgba(255,255,255,.75)}footer .col a:hover{color:#fff}
 footer .bot{display:flex;justify-content:space-between;gap:20px;padding-top:22px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.35)}
 
-@media(max-width:1000px){.grid8{grid-template-columns:repeat(2,1fr)}.flow{grid-template-columns:repeat(2,1fr)}.diff{grid-template-columns:1fr}.mod{grid-template-columns:40px 1fr;gap:14px}.mod p,.mod .states{grid-column:2}.cta .in,footer .top{grid-template-columns:1fr}.sechead{grid-template-columns:1fr}.sechead .note{text-align:left}}
-@media(max-width:680px){.wrap,header .in{padding-left:22px;padding-right:22px}nav{display:none}header .in{gap:16px}header .mark .tag{display:none}header .btn{margin-left:auto;white-space:nowrap}.grid8{grid-template-columns:1fr}.shot .slot{height:300px}.wa{right:16px;bottom:16px;padding:13px 15px}.wa .num{display:none}}
+@media(max-width:1000px){.ctaside{align-items:stretch}.grid8{grid-template-columns:repeat(2,1fr)}.flow{grid-template-columns:repeat(2,1fr)}.diff{grid-template-columns:1fr}.mod{grid-template-columns:40px 1fr;gap:14px}.mod p,.mod .states{grid-column:2}.cta .in,footer .top{grid-template-columns:1fr}.sechead{grid-template-columns:1fr}.sechead .note{text-align:left}}
+@media(max-width:680px){.wrap,header .in{padding-left:22px;padding-right:22px}nav{display:none}header .in{gap:16px}header .mark .tag{display:none}header .btn{margin-left:auto;white-space:nowrap}.grid8{grid-template-columns:1fr}.shot .slot{height:300px}.wa{right:16px;bottom:16px;padding:13px 15px}.wa .num{display:none}.qr{padding:12px}.qr img{width:88px;height:88px}}
 </style>
 </head>
 <body>
@@ -224,7 +231,7 @@ footer .bot{display:flex;justify-content:space-between;gap:20px;padding-top:22px
 <section class="cta" id="contato">
 <div class="wrap in">
 <div><div class="kick"><span class="mk"></span>Próximo passo</div><h2>Leve o WebGIS para a sua cidade.<span class="cur"></span></h2></div>
-<div class="ctaacts"><a class="btn onink" href="mailto:contato.bzrtech@gmail.com">Solicitar demonstração</a><a class="btn onwhite" href="https://wa.me/5583993454556?text=Ol%C3%A1%2C%20quero%20conhecer%20o%20BzR%20WebGIS" target="_blank" rel="noopener">Falar no WhatsApp</a></div>
+<div class="ctaside"><div class="ctaacts"><a class="btn onink" href="mailto:contato.bzrtech@gmail.com">Solicitar demonstração</a><a class="btn onwhite" href="https://wa.me/5583993454556?text=Ol%C3%A1%2C%20quero%20conhecer%20o%20BzR%20WebGIS" target="_blank" rel="noopener">Falar no WhatsApp</a></div><a class="qr" href="https://wa.me/message/6VZVDWLSBSODN1" target="_blank" rel="noopener"><img src="/assets/marca/whatsapp-qr.svg" alt="QR code do WhatsApp da BzR Tech" width="104" height="104" /><span class="txt"><b>Aponte a câmera</b><span>WhatsApp BzR Tech</span></span></a></div>
 </div>
 </section>
 
@@ -233,7 +240,7 @@ footer .bot{display:flex;justify-content:space-between;gap:20px;padding-top:22px
 <div class="top">
 <div><div class="mark"><span class="bz">BzR</span><span class="flag"></span><span class="tag">Technology</span></div><p>Gestão geoespacial para prefeituras — projetos de geoprocessamento e demandas municipais em módulos.</p></div>
 <div><h4>Plataforma</h4><div class="col"><a href="/territorio">Acessar plataforma</a><a href="#recursos">Recursos</a><a href="#modulos">Módulos</a><a href="#diferenciais">Diferenciais</a></div></div>
-<div><h4>Contato</h4><div class="col"><a href="https://wa.me/5583993454556" target="_blank" rel="noopener">WhatsApp +55 83 99345-4556</a><a href="mailto:contato.bzrtech@gmail.com">contato.bzrtech@gmail.com</a><a href="#contato">Solicitar demonstração</a></div></div>
+<div><h4>Contato</h4><div class="col"><a href="https://wa.me/5583993454556" target="_blank" rel="noopener">WhatsApp +55 83 99345-4556</a><a href="mailto:contato.bzrtech@gmail.com">contato.bzrtech@gmail.com</a><a href="#contato">Solicitar demonstração</a><a href="https://wa.me/message/6VZVDWLSBSODN1" target="_blank" rel="noopener">QR do WhatsApp</a></div></div>
 </div>
 <div class="bot"><span>© 2026 BzR Technology</span><span>Gestão Geoespacial</span></div>
 </div>
