@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR — Cadastro Imobiliário (BCI)</title>
-  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
+  <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('bzr-theme')||'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}</script>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
   <style>

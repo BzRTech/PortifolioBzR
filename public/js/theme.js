@@ -11,12 +11,13 @@ function _bzrApplyTheme(theme) {
 
 window.BzrTheme = {
   toggle: function() {
-    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    var current = document.documentElement.getAttribute('data-theme') || 'dark';
     _bzrApplyTheme(current === 'dark' ? 'light' : 'dark');
   }
 };
 
 document.addEventListener('DOMContentLoaded', function() {
-  var saved = localStorage.getItem(_BZR_THEME_KEY) || 'light';
+  // Sem preferencia salva, a plataforma abre no escuro (mesmo tema da landing).
+  var saved = localStorage.getItem(_BZR_THEME_KEY) || 'dark';
   _bzrApplyTheme(saved);
 });

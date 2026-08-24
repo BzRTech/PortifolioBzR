@@ -6,7 +6,7 @@
   <link rel="icon" href="/assets/bzr-mark.svg" type="image/svg+xml" />
   <title>BzR Território — Gestão Territorial Municipal</title>
   <meta name="description" content="WebGIS municipal: lotes, quadras, ruas e edificações com dashboard de gestão, mapa de calor e ortofoto." />
-  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
+  <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('bzr-theme')||'dark')}catch(e){document.documentElement.setAttribute('data-theme','dark')}</script>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/styles.css" />
 </head>

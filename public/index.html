@@ -46,7 +46,7 @@ a{color:var(--green-t);text-decoration:none}a:hover{color:#7ED4A0}
 .qr .txt span{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--deep-muted)}
 .wa{position:fixed;right:26px;bottom:26px;z-index:40;display:flex;align-items:center;gap:10px;background:var(--card-2);border:1px solid var(--line);color:#fff;padding:14px 18px;border-radius:0 16px 0 0;font-size:14px;font-weight:600;letter-spacing:-.01em;box-shadow:0 8px 26px rgba(10,11,10,.22);transition:.16s}
 .wa:hover{background:var(--green);color:#fff}
-.wa .d{width:8px;height:8px;background:var(--green-t);border-radius:0 4px 0 0;flex:none;animation:blink 1.05s steps(1) infinite}
+.wa .d{width:8px;height:8px;background:var(--green-t);border-radius:0 4px 0 0;flex:none;animation:pulse 1.5s ease-in-out infinite}
 .wa:hover .d{background:#fff}
 .wa .num{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:rgba(255,255,255,.6)}
 .wa:hover .num{color:rgba(255,255,255,.85)}
@@ -63,9 +63,12 @@ header .btn{padding:11px 18px;font-size:13.5px}
 .hero{padding-top:88px}
 .hero h1{font-size:clamp(44px,6.4vw,84px);font-weight:700;letter-spacing:-.04em;line-height:.94;margin:26px 0 0;max-width:19ch;text-wrap:balance}
 .hero h1 .g{color:var(--green-t)}
-.cur{display:inline-block;background:var(--green-t);border-radius:0 .3em 0 0;width:.5em;height:.88em;vertical-align:-.06em;margin-left:.1em;animation:blink 1.05s steps(1) infinite}
-@keyframes blink{0%,48%{opacity:1}49%,100%{opacity:0}}
-@media(prefers-reduced-motion:reduce){.cur,.wa .d{animation:none}}
+.cur{display:inline-block;background:var(--green-t);border-radius:0 .3em 0 0;width:.5em;height:.88em;vertical-align:-.06em;margin-left:.1em;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.22}}
+/* Com reducao de movimento o pulso nao some — fica mais lento e mais raso.
+   E variacao de opacidade, nao deslocamento: reduzir basta, desligar nao. */
+@media(prefers-reduced-motion:reduce){.cur,.wa .d{animation-duration:3s}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}}
 .cta h2 .cur,.mods .sechead h2 .cur{background:#fff}
 .hero .sub{font-size:19.5px;line-height:1.55;color:rgba(241,243,239,.72);max-width:56ch;margin:26px 0 0;text-wrap:pretty}
 .hero .acts{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
