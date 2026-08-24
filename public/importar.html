@@ -85,7 +85,7 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" style="text-decoration:none;color:inherit">
+    <a class="brand" href="/territorio" style="text-decoration:none;color:inherit">
       <img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
       <div class="brand-text">
         <strong>BzR <span class="brand-accent">Território</span></strong>
@@ -93,7 +93,7 @@
       </div>
     </a>
     <div class="top-actions">
-      <a class="btn" href="/" title="Território"><span class="ico">🗺</span> <span class="btn-label">Território</span></a>
+      <a class="btn" href="/territorio" title="Território"><span class="ico">🗺</span> <span class="btn-label">Território</span></a>
       <a class="btn" href="/demandas/" title="Gestão de Demandas"><span class="ico">🗂</span> <span class="btn-label">Demandas</span></a>
       <a class="btn" href="/bci/" title="Cadastro Imobiliário (BCI)"><span class="ico">🏠</span> <span class="btn-label">Cadastro (BCI)</span></a>
       <a class="btn" href="/os/" title="Ordens de Serviço"><span class="ico">🛠</span> <span class="btn-label">Ordens de Serviço</span></a>
@@ -375,7 +375,7 @@
       els.progOverall.style.width = '100%';
       const okCount = ready.filter((f) => f.status === 'done').length;
       logLine(`\n<b class="ok">Concluído.</b> ${okCount}/${ready.length} arquivo(s) importado(s).`);
-      showBanner('warn', 'Importação concluída. Abra o <a href="/" style="color:inherit;text-decoration:underline">mapa</a> para conferir os dados.');
+      showBanner('warn', 'Importação concluída. Abra o <a href="/territorio" style="color:inherit;text-decoration:underline">mapa</a> para conferir os dados.');
       els.banner.className = 'banner show warn';
       els.municipio.disabled = false;
       els.btnImport.disabled = false;
