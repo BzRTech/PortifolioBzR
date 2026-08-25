@@ -138,7 +138,14 @@ body {
 .ico { font-size: 14px; }
 
 /* ---------- Layout ---------- */
-.layout { position: relative; flex: 1 1 auto; min-height: 0; }
+.layout {
+  flex: 1 1 auto; min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  transition: grid-template-columns .25s ease;
+}
+.layout:has(#dashboard.hidden) { grid-template-columns: 1fr 0px; }
+.map-side { position: relative; overflow: hidden; min-height: 0; }
 #map { position: absolute; inset: 0; background: var(--paper-2); }
 
 /* ---------- Panels ---------- */
@@ -187,13 +194,21 @@ legend {
 }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; }
 
-/* ---------- Dashboard ---------- */
-.dashboard {
-  top: 14px; right: 14px; bottom: 14px; width: 380px; max-width: calc(100% - 28px);
+/* ---------- Dashboard (embedded sidebar) ---------- */
+.layout .dashboard {
+  position: relative;
+  top: auto; right: auto; bottom: auto;
+  width: auto; max-width: none;
+  border-radius: 0;
+  box-shadow: none;
+  border: none;
+  border-left: 1px solid var(--line);
+  z-index: auto;
   display: flex; flex-direction: column;
-  transition: transform .25s ease, opacity .2s ease;
+  overflow: hidden;
+  transition: opacity .2s ease;
 }
-.dashboard.hidden { transform: translateX(420px); opacity: 0; pointer-events: none; }
+.layout .dashboard.hidden { transform: none; opacity: 0; pointer-events: none; }
 .dashboard .panel-body { flex: 1; display: flex; flex-direction: column; gap: 14px; }
 
 .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -340,10 +355,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
   .controls.open { transform: none; }
   .controls .panel-body { max-height: calc(100vh - 150px); }
 
-  .dashboard {
-    top: 60px; right: 8px; left: 8px; bottom: 8px; width: auto; max-width: none;
+  .layout {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 55vh 1fr;
   }
-  .dashboard.hidden { transform: translateY(115%); opacity: 1; }
+  .layout:has(#dashboard.hidden) { grid-template-rows: 1fr; }
+  .layout .dashboard {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    overflow-y: auto;
+    max-height: 50vh;
+  }
+  .layout .dashboard.hidden { opacity: 0; pointer-events: none; }
 }
 
 @media (max-width: 540px) {
