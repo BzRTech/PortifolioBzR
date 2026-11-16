@@ -23,6 +23,9 @@ import { demandasRouter, ensureDemandasSchema } from './src/demandas.js';
 import { seedDemandasDemo } from './scripts/seed-demandas.js';
 import { bciRouter, ensureBciSchema } from './src/bci.js';
 import { seedBciDemo } from './scripts/seed-bci.js';
+import { cibRouter, ensureCibSchema } from './src/cib.js';
+import { documentosRouter, ensureDocumentosSchema } from './src/documentos.js';
+import { seedCibDemo } from './scripts/seed-cib.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -55,11 +58,16 @@ app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] })
 app.get(['/home', '/landing'], (req, res) => res.redirect(301, '/'));
 // Quem tinha "/" salvo como o mapa continua chegando la.
 app.get('/mapa', (req, res) => res.redirect(301, '/territorio'));
+app.get(['/cadastro', '/sinter'], (req, res) => res.redirect(302, '/cib/'));
 
 // ---- Autenticacao + modulos protegidos -----------------------------------
+// Documentos vem primeiro: tem rotas publicas (/api/publico/*, validacao) e o
+// bciRouter/demandasRouter aplicam requireAuth a toda requisicao que passa por eles.
+app.use(documentosRouter); // /api/publico/*, /api/documentos, /api/requerimentos
 app.use(authRouter);      // /api/auth/*, /api/usuarios
 app.use(demandasRouter);  // /api/demandas/*
 app.use(bciRouter);       // /api/bci/* (cadastro imobiliario)
+app.use(cibRouter);       // /api/cib/* (CIB/Sinter: imoveis, ciclo mensal, remessas, conciliacao, PGV)
 
 // ---- Modulo de Ordens de Servico (rotas /api/ordens, /api/waze/*) --------
 app.use(osRouter);
@@ -232,7 +240,9 @@ async function start() {
       await ensureAuthSchema();
       await ensureDemandasSchema();
       await ensureBciSchema();
-      console.log('[db] schema verificado (território + O.S. + auth + demandas + BCI).');
+      await ensureCibSchema();
+      await ensureDocumentosSchema();
+      console.log('[db] schema verificado (território + O.S. + auth + demandas + BCI + CIB/Sinter + documentos).');
       // Auto-seed opcional: util para um deploy de demonstracao sem shell.
       if (String(process.env.SEED_DEMO || '') === 'true') {
         const counts = await getCounts();
@@ -268,6 +278,15 @@ async function start() {
           console.log('[db] SEED_BCI_DEMO=true e sem BCIs — carregando demonstracao...');
           await seedBciDemo({ log: console.log });
           console.log('[db] seed de BCI de demonstracao concluido.');
+        }
+      }
+      // Auto-seed do modulo CIB/Sinter + documentos (cadastro fiscal de demonstracao).
+      if (String(process.env.SEED_CIB_DEMO || '') === 'true') {
+        const { rows } = await query('SELECT COUNT(*)::int AS n FROM imoveis');
+        if (rows[0].n === 0) {
+          console.log('[db] SEED_CIB_DEMO=true e sem imoveis — carregando cadastro de demonstracao...');
+          await seedCibDemo({ log: console.log });
+          console.log('[db] seed do CIB/Sinter concluido.');
         }
       }
     } catch (e) {

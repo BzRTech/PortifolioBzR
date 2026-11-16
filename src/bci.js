@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { query, withTransaction, isConfigured } from './db.js';
 import { requireAuth } from './auth.js';
 import { BCI_PADRAO } from './bci-catalog.js';
+import { capturarDeBci } from './cib.js';
 
 export const STATUS = ['rascunho', 'enviado', 'aprovado', 'rejeitado', 'arquivado'];
 export const AJUSTE_TIPOS = ['merge', 'desmembrar', 'redesenhar', 'reposicionar', 'outro'];
@@ -261,7 +262,13 @@ bciRouter.patch('/api/bci/:id/status', async (req, res) => {
     if (acao === 'reabrir') { push('motivo_rejeicao', ''); }
     params.push(req.params.id);
     const { rows } = await query(`UPDATE bci SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
-    res.json(mapBci(rows[0], []));
+    // BCI aprovado = evento capturado no ciclo mensal do cadastro (CIB/Sinter).
+    let movimentacaoId = null;
+    if (acao === 'aprovar') {
+      const mov = await capturarDeBci(rows[0], req.user?.nome || String(req.body?.aprovadoPorNome || ''));
+      movimentacaoId = mov?.id || null;
+    }
+    res.json({ ...mapBci(rows[0], []), movimentacaoId });
   } catch (e) {
     if (String(e.message).includes('uq_bci_aberto_lote')) return res.status(409).json({ error: 'Já existe um BCI em aberto para este lote.' });
     res.status(500).json({ error: e.message });

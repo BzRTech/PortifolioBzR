@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/marca/favicon.svg" type="image/svg+xml" />
+  <title>BzR — Documentos e Atendimento</title>
+  <meta name="description" content="Protocolo de requerimentos e emissão de certidões, declarações e relatórios do cadastro imobiliário." />
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/gestao.css" />
+</head>
+<body class="gestao">
+  <header class="topbar">
+    <a class="brand" href="/" style="text-decoration:none;color:inherit">
+      <img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
+      <div class="brand-text">
+        <strong>BzR <span class="brand-accent">Documentos</span></strong>
+        <small>Atendimento · Certidões · Declarações</small>
+      </div>
+    </a>
+    <div class="top-actions">
+      <select id="muni" class="muni-sel" aria-label="Município" title="Município"></select>
+      <nav class="nav-mods" aria-label="Módulos">
+        <a class="btn" href="/territorio" title="Território (WebGIS)"><span class="ico">🗺</span> <span class="btn-label">Território</span></a>
+        <a class="btn" href="/cib/" title="CIB/Sinter"><span class="ico">🏛</span> <span class="btn-label">CIB/Sinter</span></a>
+        <a class="btn btn-primary" aria-pressed="true" href="/documentos/" title="Documentos e atendimento"><span class="ico">📄</span> <span class="btn-label">Documentos</span></a>
+        <a class="btn" href="/bci/" title="Coleta de campo (BCI)"><span class="ico">🏠</span> <span class="btn-label">BCI</span></a>
+        <a class="btn" href="/demandas/" title="Demandas da equipe"><span class="ico">🗂</span> <span class="btn-label">Demandas</span></a>
+      </nav>
+      <div class="userchip" id="userchip"></div>
+      <button class="btn" id="btn-logout" hidden>Sair</button>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
+    </div>
+  </header>
+
+  <main class="g-wrap">
+    <nav class="g-tabs" id="tabs" aria-label="Seções">
+      <button data-tab="atendimento" class="on">📥 Atendimento <span class="badge" id="bd-req"></span></button>
+      <button data-tab="emitir">＋ Emitir documento</button>
+      <button data-tab="emitidos">🗄 Emitidos</button>
+      <a href="/validar" target="_blank" style="margin-left:auto;align-self:center;font-size:12.5px;color:var(--muted);white-space:nowrap;padding:0 6px">Página pública de validação ↗</a>
+    </nav>
+    <section id="view"><div class="vazio">Carregando…</div></section>
+  </main>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/gestao.js"></script>
+  <script src="/documentos/app.js"></script>
+  <script src="/js/tour.js"></script>
+  <script>
+    BzrTour.init({
+      id: 'documentos', fabPos: 'bottom-right',
+      title: 'Documentos e Atendimento', emoji: '📄',
+      intro: 'Protocolo de requerimentos e emissão de certidões e declarações com validação. Quer um tour?',
+      steps: [
+        { sel: '[data-tab=atendimento]', title: 'Atendimento ao cidadão', text: 'Protocole o requerimento, tramite (análise, pendência, deferimento) e entregue: ao deferir, o documento é emitido ou o evento entra no ciclo do cadastro.' },
+        { sel: '[data-tab=emitir]', title: 'Emitir documento', text: 'Certidões, declarações, notificações, ofícios e relatórios — numerados, com código de validação e QR.' },
+        { sel: '[data-tab=emitidos]', title: 'Livro de emitidos', text: 'Tudo o que foi emitido, com reimpressão, cancelamento justificado e link de validação.' },
+        { sel: null, title: 'Pronto! 🎉', text: 'Use "🎓 Tour" a qualquer momento para rever.' },
+      ],
+    });
+  </script>
+</body>
+</html>

@@ -105,7 +105,8 @@ function buildPopup(id, p) {
       return `<div class="popup-title">Lote ${p.codigo || ''}</div>`
         + row('Uso', p.uso || '—') + row('Quadra', p.quadra || '—')
         + row('Bairro', p.bairro || '—') + row('Área', fmtArea(p.area_m2))
-        + `<a class="popup-bci" href="/bci/ficha.html?${q.toString()}" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏠 Preencher BCI →</a>`;
+        + `<a class="popup-bci" href="/bci/ficha.html?${q.toString()}" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏠 Preencher BCI →</a>`
+        + `<br><a class="popup-cib" href="/cib/?${new URLSearchParams({ q: p.codigo || '', ...(p.municipio ? { municipio: p.municipio } : {}) })}#imoveis" style="display:inline-block;margin-top:6px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏛 Imóvel / CIB →</a>`;
     }
     case 'quadras':
       return `<div class="popup-title">Quadra ${p.codigo || ''}</div>`

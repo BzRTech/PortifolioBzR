@@ -5,7 +5,12 @@ pública municipal. Reúne, num único sistema, os dois módulos que antes
 viviam em repositórios separados:
 
 - **Landing institucional** (`/`) — página pública de apresentação da
-  plataforma (recursos, módulos municipais, diferenciais e contato).
+  plataforma (CIB/Sinter, recursos, módulos municipais, diferenciais e contato).
+- **[CIB/Sinter](#módulo-cibsinter)** (`/cib`) — o módulo central: implantação do
+  CIB em 5 etapas e manutenção mensal do cadastro imobiliário integrado ao Sinter.
+- **[Documentos e Atendimento](#módulo-documentos-e-atendimento)** (`/documentos`, `/validar`) —
+  protocolo de requerimentos e emissão de certidões, declarações, notificações,
+  ofícios e relatórios com número oficial, QR e código de validação.
 - **[Território](#módulo-território)** (`/territorio`) — WebGIS de **lotes, quadras,
   ruas, edificações e bairros**, com mapa de calor, ortofoto e um dashboard
   de gestão territorial.
@@ -74,6 +79,89 @@ npm start                   # http://localhost:3000  (landing), /territorio  e  
 
 As tabelas do módulo de Ordens de Serviço (`ordens_servico`, `waze_buracos`)
 são criadas automaticamente no boot, junto com o schema do Território.
+
+## Módulo CIB/Sinter
+
+Implementa o serviço descrito na revista *Território* nº 01 (BzR Technology —
+Manutenção CIB/SINTER). A Reforma Tributária (LC nº 214/2025, IN RFB nº 2.275/2025)
+deu a cada imóvel um código nacional, o **CIB**; quem fornece os dados urbanos é a
+prefeitura, e a obrigação continua depois do prazo: cada inclusão, alteração,
+baixa e reativação precisa chegar ao Sinter. Tudo em `/cib/`, por município:
+
+| Aba | O que faz |
+|-----|-----------|
+| **Painel** | Imóveis com CIB, pendências, alterações no mês, contagem até o prazo, o ciclo mensal com filas de trabalho, mapa do cadastro por status e últimas movimentações. |
+| **Imóveis** | Cadastro fiscal (inscrição ↔ lote do CTM ↔ CIB): busca, ficha com pendências, histórico Sinter e documentos, edição, baixa/reativação e **importação da base** (CSV do sistema tributário, colunas reconhecidas pelo nome). |
+| **Ciclo mensal** | *Capturar → Validar*: eventos de ITBI, alvará, habite-se, BCI, requerimento ou manual; **parcelamento** (baixa das origens + inclusão das novas). Validar aplica no cadastro e põe na fila da remessa. |
+| **Remessas** | *Transmitir*: carga inicial, remessa numerada, arquivo JSON/CSV (layout `BzR-Sinter/1.0`, adaptável ao Manual Operacional), envio em lote (protocolo) ou via API (`SINTER_API_URL`), hash SHA-256 e **importação do retorno**. |
+| **Conciliação** | Divergências do retorno (Sinter/cartório): adotar o dado externo, manter o municipal (retransmite) ou desconsiderar — com justificativa. |
+| **Vistoria IA** | Cruza a camada de edificações (extraída da ortofoto) com o cadastro: edificação nova, ampliação ou possível demolição viram lista de vistoria; agendar cria demanda de campo, confirmar captura o evento, notificar emite a notificação. |
+| **Implantação** | As 5 etapas (Diagnóstico, Saneamento, Integração, Conciliação, Internalização) com indicadores em tempo real, checklist de adesão ao convênio e raio-x da base com prazo estimado. |
+| **PGV** | Planta Genérica de Valores (R$/m² por bairro e por padrão construtivo) e recálculo do valor venal. |
+| **Município** | Dados do órgão emissor (brasão, secretaria, assinaturas, convênio, transmissores) usados nos documentos e nas remessas. |
+| **Auditoria** | Trilha de tudo: importações, edições (antes → depois), validações, remessas, retornos, conciliações, documentos e etapas. |
+
+Integrações: BCI aprovado vira evento capturado no ciclo mensal; o popup do lote
+no Território tem o atalho "Imóvel / CIB"; vistoria agendada cria demanda.
+As regras de validação (CPF/CNPJ, logradouro, bairro, áreas, vínculo e área
+geométrica do lote, matrícula, CEP) ficam em `src/cib-validacao.js`.
+
+> O CIB e o retorno do Sinter vêm da Receita Federal. Sem credenciais do
+> convênio, o envio é **em lote** (arquivo + protocolo) e o retorno é importado
+> por arquivo. `CIB_SIMULAR_RETORNO=true` habilita um retorno simulado — **apenas
+> para demonstração**.
+
+## Módulo Documentos e Atendimento
+
+- **Atendimento** (`/documentos/`): requerimentos com protocolo `AAAA/NNNNN`, prazo
+  por assunto e tramitação (protocolado → em análise → pendente → deferido/indeferido
+  → concluído). **Deferir dispara o efeito**: certidões são emitidas na hora;
+  revisão, inclusão, transferência (ITBI), baixa e reativação viram eventos do
+  ciclo mensal; vistoria vira demanda de campo. Comprovante de protocolo com QR.
+- **Emissão**: 12 modelos — Certidão de Dados Cadastrais, de Numeração Predial, de
+  Valor Venal, de Baixa; Declaração de Inscrição e CIB, de Situação Cadastral,
+  declaração livre; Notificação para Atualização Cadastral; Relatório Mensal
+  (prestação de contas) e Relatório de Diagnóstico; minutas de Ofício de Adesão
+  ao Sinter e de Termo de Indicação de Transmissor PJ. Conteúdo congelado na
+  emissão, número sequencial por tipo/ano, **código de validação + QR + hash
+  SHA-256**, página A4 pronta para imprimir/PDF. Cancelamento só com justificativa.
+- **Validação pública** (`/validar`): o cidadão ou o cartório confere autenticidade,
+  integridade, validade e cancelamento; vê o documento com CPF/CNPJ mascarado
+  (LGPD) e acompanha o protocolo (número + CPF/CNPJ).
+
+Os textos são **modelos de referência** (`src/doc-templates.js`): revise-os com
+a procuradoria conforme o Código Tributário e a legislação de cada município.
+
+### Demonstração
+
+```bash
+npm run seed-cib              # "Município Exemplo": 462 imóveis, 4 remessas, divergências, vistorias, protocolos e documentos
+npm run seed-cib -- --truncate
+```
+
+No deploy sem shell: `SEED_CIB_DEMO=true` (carrega a cidade de demonstração do
+Território, se faltar, e o cadastro fiscal fictício).
+
+### API — CIB/Sinter e Documentos (principais)
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/cib/painel` · `/diagnostico` · `/implantacao` · `/relatorio-mensal` | Indicadores (todas com `?municipio=`) |
+| GET/POST | `/api/cib/imoveis` | Lista (filtros `q`, `status`, `regra`…) / cria |
+| GET/PUT | `/api/cib/imoveis/:id` | Ficha completa / edita (gera alteração se já está no Sinter) |
+| POST | `/api/cib/imoveis/:id/baixa` · `/reativar` · `/api/cib/imoveis/importar` | Baixa, reativação, importação da base |
+| GET/POST | `/api/cib/movimentacoes` · `/parcelamento` · `/carga-inicial` | Eventos do ciclo mensal |
+| POST | `/api/cib/movimentacoes/:id/validar` · `/validar-lote` | Validar (aplica no cadastro) |
+| GET/POST | `/api/cib/remessas` · `/:id/arquivo` · `/:id/enviar` · `/:id/retorno` | Transmissão e retorno |
+| GET/POST | `/api/cib/divergencias` · `/:id/resolver` | Conciliação |
+| GET/POST/PATCH | `/api/cib/vistorias` · `/detectar` · `/:id` | Vistoria por imagem |
+| GET/PUT | `/api/cib/pgv` · `/api/cib/config` · `/api/cib/implantacao` | PGV, município, etapas |
+| GET/POST | `/api/requerimentos` · `/:id/tramitar` · `/:id/comprovante` | Protocolo |
+| GET/POST | `/api/documentos` · `/:id/html` · `/:id/cancelar` | Emissão e livro de registro |
+| GET | `/api/publico/validar/:codigo` · `/api/publico/documento/:codigo` · `/api/publico/protocolo` | Público (sem login) |
+
+Escritas sensíveis (remessas, retorno, configuração, PGV, emissão e cancelamento
+de documentos) exigem perfil **admin** ou **coordenador** quando `AUTH_ENABLED=true`.
 
 ## Módulo Território
 

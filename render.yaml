@@ -43,5 +43,18 @@ services:
       # Mude para "true" para carregar BCIs de demonstracao no boot.
       - key: SEED_BCI_DEMO
         value: "false"
+      # Mude para "true" para carregar o cadastro CIB/Sinter de demonstracao no boot.
+      - key: SEED_CIB_DEMO
+        value: "false"
+      # Botao "Simular retorno" do Sinter (gera CIBs ficticios). So para demonstracao.
+      - key: CIB_SIMULAR_RETORNO
+        value: "false"
+      # URL publica (usada no QR de validacao dos documentos).
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: SINTER_API_URL
+        sync: false
+      - key: SINTER_API_TOKEN
+        sync: false
       - key: NODE_VERSION
         value: "22"
