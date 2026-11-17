@@ -144,7 +144,8 @@ async function entrar(req, res, { doc, metodo, detalhe = '' }) {
 cidadaoRouter.get('/api/cidadao/config', asyncRoute(async (req, res) => {
   const cfg = await getConfig(muniDe(req));
   res.json({
-    municipio: muniDe(req), nomeOficial: cfg.nomeOficial, secretaria: cfg.secretaria, setor: cfg.setor, telefone: cfg.telefone, email: cfg.email, endereco: cfg.endereco,
+    municipio: muniDe(req), nomeOficial: cfg.nomeOficial, secretaria: cfg.secretaria, setor: cfg.setor, telefone: cfg.telefone, email: cfg.email, endereco: cfg.endereco, horario: cfg.horarioAtendimento, whatsapp: cfg.whatsapp,
+    brasao: /^(data:image\/(png|jpeg|svg\+xml);base64,|https:\/\/)/.test(cfg.brasao) ? cfg.brasao : '', cor: /^#[0-9a-f]{6}$/i.test(cfg.corPrimaria) ? cfg.corPrimaria : '',
     metodos: metodosAtivos(), demonstracao: !PRODUCAO && !emailConfigurado(), sessaoMin: SESSAO_MIN,
     documentos: docsPortal().map((id) => ({ id, titulo: TIPOS_DOC[id].titulo })),
     solicitacoes: REQS_PORTAL.map((id) => ({ id, label: TIPOS_REQ[id].label, prazoDias: TIPOS_REQ[id].prazoDias, exigeImovel: !['inclusao_imovel', 'outro', 'vistoria'].includes(id) })),

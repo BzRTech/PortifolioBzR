@@ -97,6 +97,8 @@ tarefas, ordens de serviço, atendimento ao cidadão e emissão de certidões e 
 
 **Validação pública (`/validar`):** mostra se o documento é autêntico, íntegro, válido ou cancelado; exibe a versão com CPF/CNPJ mascarado (LGPD) e permite consultar o protocolo pelo número + CPF/CNPJ do requerente.
 
+**Página inicial da prefeitura (`/`)** — cada instância abre com a identidade da prefeitura: brasão, cor, aviso em destaque (ex.: recadastramento), serviços (Portal do Cidadão, validar documento, consultar protocolo), "como funciona", dúvidas frequentes e atendimento presencial (endereço, horário, telefone, WhatsApp, e-mail, site). Tudo editado na aba *Município* do CIB; a apresentação da BzR fica em `/bzr`.
+
 **Portal do Cidadão (`/cidadao`)** — feito para o celular:
 - **Entrar:** CPF/CNPJ + uma segunda prova — gov.br, código de 6 dígitos enviado ao e-mail que já está no cadastro, ou a inscrição de um dos imóveis (carnê do IPTU). A prefeitura escolhe quais aceita.
 - **Meus imóveis:** inscrição, endereço, CIB, áreas, valor venal e matrícula de cada imóvel no CPF/CNPJ.

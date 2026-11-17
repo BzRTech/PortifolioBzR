@@ -32,6 +32,7 @@ import { documentosRouter } from './src/documentos.js';
 import { apiExternaRouter } from './src/api-externa.js';
 import { ssoRouter } from './src/sso.js';
 import { cidadaoRouter } from './src/cidadao.js';
+import { prefeituraRouter, usarPaginaPrefeitura } from './src/prefeitura.js';
 import { limitar } from './src/ratelimit.js';
 
 // ---- Travas de ambiente (antes de qualquer coisa) -------------------------
@@ -95,6 +96,9 @@ if (serveLocalTiles && fs.existsSync(localTilesDir)) {
 }
 
 // ---- Front-end estático ---------------------------------------------------
+// Raiz: página da prefeitura (instância com MUNICIPIO ou LANDING=prefeitura) ou a landing da BzR.
+app.use(prefeituraRouter);
+app.get('/bzr', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 app.get(['/home', '/landing'], (req, res) => res.redirect(301, '/'));
 app.get('/mapa', (req, res) => res.redirect(301, '/territorio'));
@@ -321,7 +325,7 @@ async function start() {
     console.warn('[db] DATABASE_URL nao definida — a API de dados respondera 503 ate configurar.');
   }
   app.listen(PORT, () => {
-    console.log(`BzR rodando em http://localhost:${PORT}${MUNICIPIO_FIXO ? ` · município: ${MUNICIPIO_FIXO}` : ''} · módulos: ${MODULOS.join(', ')}${PRODUCAO ? ' · PRODUÇÃO' : ''}`);
+    console.log(`BzR rodando em http://localhost:${PORT}${MUNICIPIO_FIXO ? ` · município: ${MUNICIPIO_FIXO}` : ''} · página inicial: ${usarPaginaPrefeitura() ? 'prefeitura' : 'BzR'} · módulos: ${MODULOS.join(', ')}${PRODUCAO ? ' · PRODUÇÃO' : ''}`);
   });
 }
 

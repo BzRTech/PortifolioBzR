@@ -843,7 +843,14 @@ async function config(v) {
       <div class="box"><h3>Convênio Sinter</h3><div class="f">${f('convenioNumero', 'Nº do convênio')}${f('convenioData', 'Data de adesão', 'type=date')}${f('prazoSinter', 'Prazo legal de integração', 'type=date')}
         <label class="full">Transmissores PJ (até 3)<input name="transmissores" value="${esc(c.transmissores)}" /></label></div></div>
       <div class="box"><h3>Brasão</h3><div style="display:flex;gap:12px;align-items:center"><img id="br" src="${esc(c.brasao)}" alt="" style="width:72px;height:72px;object-fit:contain;border:1px dashed var(--line-2)" />
-        <div><input type="file" id="brf" accept="image/png,image/jpeg,image/svg+xml" /><div class="small dim">PNG/JPG/SVG até ~300 KB.</div><button class="b sm" id="brx">remover</button></div></div></div></div></div>`;
+        <div><input type="file" id="brf" accept="image/png,image/jpeg,image/svg+xml" /><div class="small dim">PNG/JPG/SVG até ~300 KB.</div><button class="b sm" id="brx">remover</button></div></div></div></div></div>
+    <div class="box" style="margin-top:16px"><h3 style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">Página inicial da prefeitura <a class="b sm" href="${c.municipioFixo ? '/' : '/inicio?municipio=' + encodeURIComponent(c.municipio)}" target="_blank">Ver página ↗</a></h3>
+      <p class="small dim" style="margin:0 0 10px">É o que o munícipe vê ao abrir o endereço da prefeitura (carnê, QR dos documentos, WhatsApp): nome, brasão, serviços do Portal do Cidadão e atendimento.</p>
+      <div class="f c3"><label>Cor da prefeitura<input type="color" name="corPrimaria" value="${esc(c.corPrimaria || '#0f5132')}" style="height:40px;padding:3px" /></label>
+        <label>WhatsApp do atendimento<input name="whatsapp" value="${esc(c.whatsapp)}" placeholder="(83) 99999-0000" /></label>
+        <label>Horário de atendimento<input name="horarioAtendimento" value="${esc(c.horarioAtendimento)}" placeholder="Seg. a sex., 8h às 13h" /></label>
+        <label class="full">Mensagem de boas-vindas (opcional)<textarea name="mensagemInicial" maxlength="600" placeholder="Consulte os seus imóveis, emita certidões e faça solicitações sem sair de casa.">${esc(c.mensagemInicial)}</textarea></label>
+        <label class="full">Aviso em destaque (opcional — ex.: recadastramento, feriado, prazo do IPTU)<textarea name="aviso" maxlength="600">${esc(c.aviso)}</textarea></label></div></div>`;
   let brasao = c.brasao;
   el('brf').onchange = (e) => { const fl = e.target.files[0]; if (!fl) return; if (fl.size > 300000) return G.toast('Imagem muito grande.', true); const r = new FileReader(); r.onload = () => { brasao = r.result; el('br').src = brasao; }; r.readAsDataURL(fl); };
   el('brx').onclick = () => { brasao = ''; el('br').removeAttribute('src'); };

@@ -303,6 +303,10 @@
   (async () => {
     try { S.cfg = await api('/config'); } catch (e) { app.innerHTML = `<div class="vazio-cid">${esc(e.message)}</div>`; return; }
     $('#orgao').textContent = S.cfg.nomeOficial || S.cfg.municipio || 'Cadastro imobiliário municipal';
+    // Identidade da prefeitura: brasão no topo e a cor dela na faixa superior.
+    if (S.cfg.brasao) { const img = $('.topbar .logo-img'); img.src = S.cfg.brasao; img.alt = 'Brasão'; img.style.objectFit = 'contain'; }
+    if (S.cfg.cor) document.documentElement.style.setProperty('--accent', S.cfg.cor);
+    $('.topbar .brand').href = '/';
     document.title = `Portal do Cidadão — ${S.cfg.nomeOficial || S.cfg.municipio || ''}`;
     $('#rodape').innerHTML = `<b>${esc(S.cfg.nomeOficial || '')}</b>${S.cfg.secretaria ? ' · ' + esc(S.cfg.secretaria) : ''}${S.cfg.setor ? ' · ' + esc(S.cfg.setor) : ''}<br>
       ${[S.cfg.endereco, S.cfg.telefone, S.cfg.email].filter(Boolean).map(esc).join(' · ')}<br>Seus dados são tratados conforme a LGPD (Lei 13.709/2018): você vê só os imóveis do seu CPF/CNPJ e cada acesso é registrado.`;

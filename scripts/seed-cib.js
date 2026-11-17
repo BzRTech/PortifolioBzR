@@ -108,6 +108,7 @@ export async function seedCibDemo({ truncate = false, log = () => {} } = {}) {
      ON CONFLICT (municipio) DO UPDATE SET nome_oficial = EXCLUDED.nome_oficial, codigo_ibge = EXCLUDED.codigo_ibge`,
     [MUNI, `Prefeitura Municipal de ${MUNI}`, IBGE, cnpjFicticio(), EQUIPE]
   );
+  await semearPaginaDemo();
 
   // PGV: exercício 2026 (rascunho → publicado depois da carga).
   await query(`INSERT INTO pgv_exercicios (municipio, ano, status, ato_legal) VALUES ($1, 2026, 'rascunho', 'Lei Complementar Municipal nº 00/2025 (fictícia)') ON CONFLICT DO NOTHING`, [MUNI]);
@@ -310,6 +311,20 @@ export async function seedCibDemo({ truncate = false, log = () => {} } = {}) {
   return fim;
 }
 
+// Identidade FICTÍCIA da prefeitura de demonstração (página inicial e portal):
+// um escudo genérico com as iniciais — não reproduz brasão de nenhum município.
+export const BRASAO_DEMO = 'data:image/svg+xml;base64,' + Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 116">
+<path d="M50 3 L95 15 V58 C95 86 74 104 50 113 C26 104 5 86 5 58 V15 Z" fill="#1d4e89" stroke="#f2c230" stroke-width="5"/>
+<path d="M50 16 L83 25 V58 C83 79 68 93 50 100 C32 93 17 79 17 58 V25 Z" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="2"/>
+<text x="50" y="68" text-anchor="middle" font-family="Georgia,serif" font-size="34" font-weight="700" fill="#ffffff">ME</text>
+<rect x="30" y="76" width="40" height="3" fill="#f2c230"/></svg>`).toString('base64');
+export async function semearPaginaDemo() {
+  await query(`UPDATE municipio_config SET cor_primaria = '#1d4e89', brasao = CASE WHEN brasao = '' THEN $2 ELSE brasao END,
+      horario_atendimento = 'Segunda a sexta, das 8h às 13h', whatsapp = '(83) 90000-0000', site = 'https://exemplo.invalid',
+      aviso = 'Recadastramento imobiliário 2027: confira os seus imóveis no Portal do Cidadão e peça a correção até 31/12/2026, sem sair de casa.'
+    WHERE municipio = $1`, [MUNI, BRASAO_DEMO]);
+}
+
 // Munícipe de DEMONSTRAÇÃO do Portal do Cidadão (dados fictícios): três imóveis
 // (um com CIB, um terreno, um ainda sem CIB), e-mail para o código de acesso e
 // duas solicitações feitas pelo portal.
@@ -345,7 +360,7 @@ if (isMain) {
     if (PRODUCAO) { console.error('Seed de demonstração bloqueado em produção (NODE_ENV=production).'); process.exit(1); }
     try {
       console.log(`Carregando o cadastro de demonstração (CIB/Sinter) em "${MUNI}"...`);
-      if (process.argv.includes('--cidadao')) await semearCidadaoDemo({ log: console.log }); // só o munícipe do portal, num banco já semeado
+      if (process.argv.includes('--cidadao')) { await semearPaginaDemo(); await semearCidadaoDemo({ log: console.log }); } // num banco já semeado
       else await seedCibDemo({ truncate: process.argv.includes('--truncate'), log: console.log });
       console.log('Concluído. Abra /cib/ e /documentos/.');
     } catch (e) { console.error('Erro:', e.message, e.stack); process.exitCode = 1; }

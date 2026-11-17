@@ -322,7 +322,7 @@ export async function ensureCibSchema() {
 // ---- configuracao do municipio --------------------------------------------
 const CONFIG_CAMPOS = ['nome_oficial', 'uf', 'codigo_ibge', 'cnpj', 'secretaria', 'setor', 'endereco', 'telefone', 'email', 'site',
   'prefeito_nome', 'responsavel_nome', 'responsavel_cargo', 'convenio_numero', 'convenio_data', 'prazo_sinter', 'transmissores',
-  'validade_certidao_dias', 'brasao', 'rodape_documentos'];
+  'validade_certidao_dias', 'brasao', 'rodape_documentos', 'cor_primaria', 'horario_atendimento', 'whatsapp', 'mensagem_inicial', 'aviso'];
 
 export async function getConfig(municipio = '') {
   const { rows } = await query('SELECT * FROM municipio_config WHERE municipio = $1', [municipio]);
@@ -337,6 +337,8 @@ export async function getConfig(municipio = '') {
     convenioNumero: c.convenio_numero || '', convenioData: isoData(c.convenio_data),
     prazoSinter: isoData(c.prazo_sinter) || PRAZO_PADRAO, transmissores: c.transmissores || '',
     validadeCertidaoDias: c.validade_certidao_dias || 90, brasao: c.brasao || '', rodapeDocumentos: c.rodape_documentos || '',
+    corPrimaria: c.cor_primaria || '', horarioAtendimento: c.horario_atendimento || '', whatsapp: c.whatsapp || '',
+    mensagemInicial: c.mensagem_inicial || '', aviso: c.aviso || '',
     configurado: Boolean(rows[0]),
   };
 }
@@ -349,7 +351,11 @@ async function salvarConfig(municipio, body) {
     convenio_numero: body.convenioNumero, convenio_data: body.convenioData || null, prazo_sinter: body.prazoSinter || null,
     transmissores: body.transmissores, validade_certidao_dias: Number(body.validadeCertidaoDias) || 90,
     brasao: body.brasao, rodape_documentos: body.rodapeDocumentos,
+    cor_primaria: body.corPrimaria, horario_atendimento: body.horarioAtendimento, whatsapp: body.whatsapp,
+    mensagem_inicial: body.mensagemInicial, aviso: body.aviso,
   };
+  if (map.cor_primaria && !/^#[0-9a-fA-F]{6}$/.test(map.cor_primaria)) throw erro(400, 'Cor da prefeitura deve ser #RRGGBB.');
+  if (map.brasao && !/^(data:image\/(png|jpeg|svg\+xml);base64,|https:\/\/)/.test(map.brasao)) throw erro(400, 'Brasão inválido: envie PNG, JPG ou SVG.');
   if (map.brasao && String(map.brasao).length > 400000) throw erro(400, 'Brasão muito grande (máx. ~300 KB).');
   const cols = CONFIG_CAMPOS.filter((c) => map[c] !== undefined);
   const vals = cols.map((c) => (typeof map[c] === 'string' ? map[c].slice(0, c === 'brasao' ? 400000 : 1000) : map[c]));

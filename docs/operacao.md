@@ -76,3 +76,17 @@ Para trocar o `SSO_SECRET` (por exemplo, se vazar), mude o valor em todas as ins
 - URL de retorno a cadastrar no gov.br: `<PUBLIC_BASE_URL>/api/cidadao/govbr/retorno`. Teste primeiro com `GOVBR_AMBIENTE=homologacao`.
 - Para que o cidadão encontre os seus imóveis, o CPF/CNPJ do contribuinte precisa estar correto no cadastro. O raio-x da Implantação aponta os CPFs inválidos ou ausentes. Para a entrada por e-mail, importe também o e-mail do contribuinte.
 - Detalhes e modelo de segurança: [`docs/portal-cidadao.md`](portal-cidadao.md).
+
+## Página inicial da prefeitura
+
+- Na instância de uma prefeitura (com `MUNICIPIO`), a raiz `/` mostra a página da prefeitura. Para forçar, use `LANDING=prefeitura` ou `LANDING=bzr`. A apresentação da BzR fica sempre em `/bzr`.
+- Os dados vêm da aba **Município** do CIB:
+  - nome oficial, secretaria e setor;
+  - endereço, telefone, e-mail e site;
+  - brasão;
+  - os campos novos: cor, WhatsApp, horário, mensagem de boas-vindas e aviso em destaque.
+
+  O botão "Ver página ↗" abre o resultado.
+- Os números do cadastro (imóveis ativos, CIB atribuídos e documentos emitidos) aparecem na página. Para escondê-los, use `PAGINA_NUMEROS=false`.
+- Os serviços mostrados seguem os módulos contratados: sem `portal`, a página só oferece validar documento e consultar protocolo.
+- Domínio: aponte o endereço que a prefeitura divulga (ex.: `imoveis.cidade.pb.gov.br`) para o deploy e defina `PUBLIC_BASE_URL` com ele. Esse é o endereço que vai no QR dos documentos.
