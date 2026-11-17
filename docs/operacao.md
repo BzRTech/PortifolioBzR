@@ -90,3 +90,29 @@ Para trocar o `SSO_SECRET` (por exemplo, se vazar), mude o valor em todas as ins
 - Os números do cadastro (imóveis ativos, CIB atribuídos e documentos emitidos) aparecem na página. Para escondê-los, use `PAGINA_NUMEROS=false`.
 - Os serviços mostrados seguem os módulos contratados: sem `portal`, a página só oferece validar documento e consultar protocolo.
 - Domínio: aponte o endereço que a prefeitura divulga (ex.: `imoveis.cidade.pb.gov.br`) para o deploy e defina `PUBLIC_BASE_URL` com ele. Esse é o endereço que vai no QR dos documentos.
+
+## Fase de teste: Render (grátis) + Neon (grátis)
+
+Serve para demonstração e para piloto. Antes de abrir para o munícipe, passe para planos pagos.
+
+**Neon**
+- Crie um projeto por prefeitura, na **mesma região do Render** (EUA). O PostGIS é criado pela migration 001.
+- Em `DATABASE_URL`, pode usar o endereço com `-pooler`: as migrations trocam sozinhas para a conexão direta, porque o lock delas é de sessão (`src/db.js → urlDireta`).
+- No plano grátis o banco "dorme" e acorda na primeira consulta em poucos segundos. O espaço é pequeno, e os anexos do portal ficam no banco, então acompanhe o tamanho.
+
+**Render**
+- No `render.yaml`, troque `plan: starter` por `plan: free`.
+- No plano grátis o serviço dorme após uns 15 minutos sem acesso, e a primeira visita leva perto de 1 minuto. A memória zera a cada reinício, o que limpa os limites de tentativas e um login gov.br que estiver no meio.
+
+**Escolha o modo:**
+
+| | Demonstração (dados fictícios) | Piloto com dados reais |
+|---|---|---|
+| `NODE_ENV` | `demo` | `production` |
+| Dados | `SEED_CIB_DEMO=true` (Município Exemplo) | importação da base da prefeitura (`npm run importar-base`) |
+| Login | `AUTH_ENABLED=true` + `AUTH_SECRET` forte | o mesmo, mais `ADMIN_PASSWORD` com 12+ caracteres |
+| `MUNICIPIO` / `PUBLIC_BASE_URL` | opcionais | obrigatórios (`https://…onrender.com` serve) |
+| Retorno do Sinter | `CIB_SIMULAR_RETORNO=true` pode | proibido (o boot falha) |
+| Portal: código por e-mail | aparece na tela | só com `SMTP_URL` |
+
+Dado real de contribuinte (CPF, nome) só em `NODE_ENV=production`, mesmo no plano grátis: é o modo que liga as travas de LGPD e de segurança.

@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { getPool, isConfigured } from './db.js';
+import { getPool, isConfigured, clienteDireto } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const DIR_MIGRATIONS = path.join(__dirname, '..', 'migrations');
@@ -46,7 +46,8 @@ async function adotarBancoLegado(client, log) {
 /** Aplica as migrations pendentes. Devolve a lista das aplicadas nesta chamada. */
 export async function runMigrations({ log = console.log } = {}) {
   if (!isConfigured) return [];
-  const client = await getPool().connect();
+  // Conexão direta (não o pool): o advisory lock é de sessão — ver urlDireta() em db.js.
+  const client = await clienteDireto();
   const aplicadas = [];
   try {
     await client.query('SELECT pg_advisory_lock($1)', [LOCK_ID]);
@@ -87,7 +88,7 @@ export async function runMigrations({ log = console.log } = {}) {
     await client.query('RESET search_path');
   } finally {
     await client.query('SELECT pg_advisory_unlock($1)', [LOCK_ID]).catch(() => {});
-    client.release();
+    await client.end().catch(() => {});
   }
   return aplicadas;
 }
