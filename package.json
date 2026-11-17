@@ -1,7 +1,7 @@
 {
   "name": "bzr-gestao-publica",
   "version": "1.0.0",
-  "description": "BzR — plataforma de gestão pública municipal: Território (WebGIS de lotes, quadras, ruas e edificações com dashboard, mapa de calor e ortofoto) e Ordens de Serviço (infraestrutura + buracos do Waze). PostGIS + Neon + Render.",
+  "description": "BzR — plataforma de gestão pública municipal: CIB/Sinter (implantação e manutenção do cadastro), Documentos e atendimento, Território (WebGIS de lotes, quadras, ruas e edificações com dashboard, mapa de calor e ortofoto) e Ordens de Serviço (infraestrutura + buracos do Waze). PostGIS + Neon + Render.",
   "main": "server.js",
   "type": "module",
   "engines": {
@@ -10,11 +10,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js",
+    "test:db": "node --test test/banco.test.js",
+    "migrate": "node src/migrate.js",
+    "migrate:status": "node src/migrate.js status",
+    "migrate:nova": "node src/migrate.js nova",
     "init-db": "node scripts/init-db.js",
+    "importar-base": "node scripts/importar-base.js",
+    "backup": "bash scripts/backup.sh",
+    "restore-test": "bash scripts/restore-test.sh",
     "seed": "node scripts/seed-demo.js",
     "seed-os": "node scripts/seed-os.js",
     "seed-demandas": "node scripts/seed-demandas.js",
     "seed-bci": "node scripts/seed-bci.js",
+    "seed-cib": "node scripts/seed-cib.js",
     "import-os-neon": "node scripts/import-os-neon.js",
     "import": "node scripts/import-geojson.js",
     "derive-bairros": "node scripts/derive-bairros.js",
@@ -24,7 +33,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "pg": "^8.13.1"
+    "nodemailer": "^6.9.16",
+    "pg": "^8.13.1",
+    "qrcode-generator": "^1.4.4"
   },
   "author": "BzRTech",
   "license": "MIT"

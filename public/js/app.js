@@ -41,15 +41,38 @@ const swatchHtml = (id) => id === 'ruas'
 
 const scopeArg = () => currentMunicipio || undefined;
 
+// Camadas pesadas (lotes, edificações) vêm só da área visível, a partir de um
+// zoom mínimo — municípios grandes não carregam o GeoJSON inteiro.
+let CFG_BBOX = { zoomMinimo: 15, limite: 5000 };
+const PESADAS = new Set();
+const avisos = {};
+function atualizarAviso() { gis.aviso(Object.values(avisos).filter(Boolean).join(' · ')); }
+
 async function showOverlay(id) {
-  if (loadedKey[id] !== scopeKey()) {
+  if (PESADAS.has(id)) {
+    if (gis.zoom() < CFG_BBOX.zoomMinimo) {
+      gis.setOverlayData(id, { type: 'FeatureCollection', features: [] });
+      loadedKey[id] = null;
+      avisos[id] = `Aproxime o mapa para ver ${id === 'lotes' ? 'os lotes' : 'as edificações'}`;
+    } else {
+      const bbox = gis.bbox();
+      const chave = scopeKey() + '|' + bbox.join(',');
+      if (loadedKey[id] !== chave) {
+        const data = await api.layer(id, { municipio: scopeArg(), bairro: currentBairro || undefined, bbox: bbox.join(','), limit: CFG_BBOX.limite });
+        gis.setOverlayData(id, data);
+        loadedKey[id] = chave;
+        avisos[id] = data.truncado ? `Área com mais de ${CFG_BBOX.limite} ${id} — aproxime para ver todos` : '';
+      }
+    }
+    atualizarAviso();
+  } else if (loadedKey[id] !== scopeKey()) {
     const data = await api.layer(id, { municipio: scopeArg(), bairro: currentBairro || undefined });
     gis.setOverlayData(id, data);
     loadedKey[id] = scopeKey();
   }
   gis.toggleOverlay(id, true);
 }
-function hideOverlay(id) { gis.toggleOverlay(id, false); }
+function hideOverlay(id) { gis.toggleOverlay(id, false); avisos[id] = ''; atualizarAviso(); }
 
 async function refreshHeat() {
   if (!els.heatToggle.checked) { gis.clearHeat(); return; }
@@ -159,6 +182,15 @@ async function setupMunicipios() {
     els.filtroMunicipio.innerHTML = municipios.map((m) => `<option value="${m}">${m}</option>`).join('');
     els.filtroMunicipio.value = currentMunicipio;
     els.campoMunicipio.hidden = false;
+    // Instância travada num município: o seletor troca de prefeitura (outro deploy).
+    if (window.BzrInstancias) {
+      const inst = await window.BzrInstancias.carregar();
+      if (inst?.atual?.municipio) {
+        els.filtroMunicipio.removeEventListener('change', applyMunicipio);
+        await window.BzrInstancias.montar(els.filtroMunicipio, inst);
+        if (!inst.outras?.length) els.campoMunicipio.hidden = true;
+      }
+    }
   } else {
     els.campoMunicipio.hidden = true;
     currentMunicipio = '';
@@ -219,6 +251,9 @@ async function main() {
     return;
   }
   gis.init(config);
+  if (config.bbox) CFG_BBOX = config.bbox;
+  (config.layers || []).filter((l) => l.porBbox).forEach((l) => PESADAS.add(l.id));
+  gis.aoMover(() => { for (const id of PESADAS) if (gis.isOn(id)) showOverlay(id).catch((e) => console.error(id, e.message)); });
   buildControls(config);
 
   const ok = await checkData(config);

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/js/sessao.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/marca/favicon.svg" type="image/svg+xml" />
+  <title>API de dados por lote — BzR</title>
+  <meta name="description" content="Documentação do acesso externo: baixe os dados de cada lote e imóvel do cadastro em JSON, GeoJSON ou CSV com uma chave de API." />
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/gestao.css" />
+  <style>
+    .doc { max-width: 920px; margin: 28px auto; padding: 0 16px 80px; }
+    .doc h1 { font-size: 30px; margin: 6px 0 6px; letter-spacing: -.02em; }
+    .doc h2 { font-size: 19px; margin: 36px 0 10px; padding-top: 14px; border-top: 1px solid var(--ink); letter-spacing: -.01em; }
+    .doc h3 { font-size: 15px; margin: 22px 0 8px; }
+    .doc p, .doc li { font-size: 14.5px; line-height: 1.6; }
+    .doc .lead { color: var(--muted); font-size: 15.5px; margin: 0 0 8px; }
+    .doc pre { background: var(--card); border: 1px solid var(--line-2); padding: 12px 14px; overflow-x: auto; font: 12.5px/1.55 var(--font-mono); margin: 8px 0 14px; }
+    .doc code { font-family: var(--font-mono); font-size: .92em; }
+    .doc p code, .doc li code, .doc td code { background: var(--card); border: 1px solid var(--line); padding: 1px 5px; }
+    .doc table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 6px 0 14px; }
+    .doc th, .doc td { text-align: left; border-bottom: 1px solid var(--line); padding: 7px 8px 7px 0; vertical-align: top; }
+    .doc th { font: 700 10.5px var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .ep { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font: 600 14px var(--font-mono); margin: 22px 0 6px; }
+    .ep .m { background: var(--verde-2); color: #fff; padding: 2px 8px; font-size: 11px; }
+    .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin: 14px 0 0; }
+    .nota { border-left: 4px solid var(--amarelo); background: var(--card); padding: 10px 14px; font-size: 13.5px; margin: 12px 0; }
+    #base { font-weight: 700; }
+  </style>
+</head>
+<body class="gestao">
+  <header class="topbar">
+    <a class="brand" href="/" style="text-decoration:none;color:inherit"><img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
+      <div class="brand-text"><strong>API de <span class="brand-accent">dados por lote</span></strong><small>Acesso externo ao cadastro imobiliário</small></div></a>
+    <div class="top-actions"><button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button></div>
+  </header>
+  <main class="doc">
+    <div class="kicker">Para parceiros da prefeitura</div>
+    <h1>Baixe os dados de cada lote</h1>
+    <p class="lead">Cartórios, secretarias, Receita Estadual, consórcios e sistemas da própria prefeitura consultam o cadastro imobiliário em <b>JSON</b>, <b>GeoJSON</b> (abre no QGIS) ou <b>CSV</b> (abre no Excel). Somente leitura, com chave individual.</p>
+    <p>Endereço base: <code id="base">/api/externa/v1</code></p>
+    <nav class="toc"><a href="#chave">1. Chave</a><a href="#escopos">2. Escopos</a><a href="#lotes">3. Lotes</a><a href="#imoveis">4. Imóveis</a><a href="#exemplos">5. Exemplos</a><a href="#limites">6. Limites e erros</a><a href="#lgpd">7. LGPD</a></nav>
+
+    <h2 id="chave">1. Chave de acesso</h2>
+    <p>A chave é criada pelo administrador do cadastro da prefeitura (CIB/Sinter → <b>Acesso externo</b>), uma por parceiro, e tem o formato <code>bzr_&lt;prefixo&gt;_&lt;segredo&gt;</code>. Envie-a em todo pedido:</p>
+    <pre>Authorization: Bearer bzr_3f9a1c22be_…</pre>
+    <p>ou no cabeçalho <code>X-API-Key</code>. Não envie a chave na URL: ela ficaria em logs de servidores e navegadores. A chave pode ter validade, lista de IPs permitidos e ser revogada a qualquer momento.</p>
+    <p><code>GET /</code> devolve o município, os escopos e o limite da sua chave — use para testar.</p>
+
+    <h2 id="escopos">2. Escopos</h2>
+    <table>
+      <thead><tr><th>Escopo</th><th>O que libera</th></tr></thead>
+      <tbody>
+        <tr><td><code>lotes</code></td><td>Código, quadra, bairro, uso, área e geometria do lote; imóveis do lote com inscrição, CIB, tipo, uso, situação, endereço e áreas de terreno e construída.</td></tr>
+        <tr><td><code>cadastro</code></td><td>Ficha técnica do imóvel: setor/quadra/lote, testada, pavimentos, padrão construtivo, ano, tipologia, matrícula, cartório, CNM, CNS, status no Sinter, baixa e data da última alteração. Libera também <code>/imoveis</code>.</td></tr>
+        <tr><td><code>valores</code></td><td>Valor venal do terreno, da construção e total, com o exercício da PGV.</td></tr>
+        <tr><td><code>pessoais</code></td><td>Nome e CPF/CNPJ do contribuinte e dados de titularidade. Só com finalidade e base legal registradas e validade de até 1 ano (ver <a href="#lgpd">LGPD</a>).</td></tr>
+      </tbody>
+    </table>
+    <p>Campos fora do escopo simplesmente não aparecem na resposta. E-mail e telefone do contribuinte nunca saem pela API.</p>
+
+    <h2 id="lotes">3. Lotes</h2>
+    <div class="ep"><span class="m">GET</span>/lotes</div>
+    <p>Lista paginada de lotes, cada um com os seus imóveis.</p>
+    <table>
+      <thead><tr><th>Parâmetro</th><th>Descrição</th></tr></thead>
+      <tbody>
+        <tr><td><code>codigo</code></td><td>Código do lote.</td></tr>
+        <tr><td><code>quadra</code>, <code>bairro</code></td><td>Filtros (bairro sem diferença de maiúsculas).</td></tr>
+        <tr><td><code>bbox</code></td><td><code>oeste,sul,leste,norte</code> em graus (WGS84). Máx. 1 grau².</td></tr>
+        <tr><td><code>pagina</code>, <code>por_pagina</code></td><td>Padrão 1 e 100; máximo 1000 por página (5000 em CSV).</td></tr>
+        <tr><td><code>formato</code></td><td><code>json</code> (padrão), <code>geojson</code> (FeatureCollection) ou <code>csv</code> (uma linha por lote, com as inscrições separadas por <code>|</code>).</td></tr>
+      </tbody>
+    </table>
+    <div class="ep"><span class="m">GET</span>/lotes/{codigo}</div>
+    <p>Um lote com todos os seus imóveis e a geometria. <code>formato=geojson</code> devolve uma Feature; <code>formato=csv</code>, uma linha por imóvel com os dados do lote repetidos.</p>
+    <pre>{
+  "municipio": "Município Exemplo",
+  "lote": {
+    "codigo": "01-003-0007", "quadra": "003", "bairro": "Centro", "uso": "residencial", "areaM2": 312.4,
+    "centroide": { "lon": -34.8712, "lat": -7.1186 },
+    "imoveis": [{
+      "inscricao": "01.003.0007.001", "cib": "…", "tipo": "predial", "uso": "residencial", "situacao": "ativo",
+      "endereco": { "logradouro": "Rua …", "numero": "120", "complemento": "", "bairro": "Centro", "cep": "…" },
+      "areaTerrenoM2": 312.4, "areaConstruidaM2": 148
+    }]
+  },
+  "geometria": { "type": "MultiPolygon", "coordinates": [ … ] }
+}</pre>
+
+    <h2 id="imoveis">4. Imóveis <span class="small dim">(escopo cadastro)</span></h2>
+    <div class="ep"><span class="m">GET</span>/imoveis</div>
+    <table>
+      <thead><tr><th>Parâmetro</th><th>Descrição</th></tr></thead>
+      <tbody>
+        <tr><td><code>inscricao</code>, <code>cib</code></td><td>Busca exata.</td></tr>
+        <tr><td><code>bairro</code>, <code>situacao</code></td><td><code>situacao</code> = <code>ativo</code> ou <code>baixado</code>.</td></tr>
+        <tr><td><code>alterados_desde</code></td><td>Data ISO (ex.: <code>2026-11-01</code>). Use para sincronização incremental: guarde a data da última carga e peça só o que mudou.</td></tr>
+        <tr><td><code>pagina</code>, <code>por_pagina</code>, <code>formato</code></td><td>Como em <code>/lotes</code>; formatos <code>json</code> e <code>csv</code>.</td></tr>
+      </tbody>
+    </table>
+    <div class="ep"><span class="m">GET</span>/imoveis/{inscricao}</div>
+    <p>Um imóvel.</p>
+
+    <h2 id="exemplos">5. Exemplos</h2>
+    <h3>Planilha com todos os lotes de um bairro</h3>
+    <pre data-ex>curl -H "Authorization: Bearer $BZR_CHAVE" \
+  "{BASE}/lotes?bairro=Centro&amp;por_pagina=5000&amp;formato=csv" -o lotes-centro.csv</pre>
+    <h3>Um lote para o QGIS</h3>
+    <pre data-ex>curl -H "Authorization: Bearer $BZR_CHAVE" "{BASE}/lotes/01-003-0007?formato=geojson" -o lote.geojson</pre>
+    <p>No QGIS também dá para ler direto: <i>Camada → Adicionar camada vetorial → Protocolo HTTP</i>, com a URL acima e uma configuração de autenticação do tipo <i>API Header</i> (<code>Authorization</code> = <code>Bearer …</code>).</p>
+    <h3>Sincronização diária (Python)</h3>
+    <pre data-ex>import requests
+s = requests.Session()
+s.headers["Authorization"] = "Bearer " + CHAVE
+pagina = 1
+while True:
+    r = s.get("{BASE}/imoveis", params={"alterados_desde": "2026-11-01", "pagina": pagina, "por_pagina": 1000})
+    r.raise_for_status()
+    dados = r.json()
+    for imovel in dados["imoveis"]:
+        salvar(imovel)
+    if pagina >= dados["paginas"]:
+        break
+    pagina += 1</pre>
+
+    <h2 id="limites">6. Limites e erros</h2>
+    <table>
+      <thead><tr><th>Status</th><th>Quando</th></tr></thead>
+      <tbody>
+        <tr><td><code>401</code></td><td>Chave ausente, inválida, revogada ou expirada.</td></tr>
+        <tr><td><code>403</code></td><td>Escopo não liberado para a chave, ou IP fora da lista permitida.</td></tr>
+        <tr><td><code>404</code></td><td>Lote ou imóvel não encontrado.</td></tr>
+        <tr><td><code>400</code></td><td>Parâmetro inválido (formato, bbox, data).</td></tr>
+        <tr><td><code>429</code></td><td>Limite por minuto atingido (padrão 60). Respeite o cabeçalho <code>Retry-After</code>.</td></tr>
+      </tbody>
+    </table>
+    <p>Erros vêm como <code>{"error": "mensagem"}</code>. O cabeçalho <code>X-RateLimit-Limit</code> informa o limite da sua chave. CIBs ainda não atribuídos pela Receita Federal vêm como <code>null</code>.</p>
+
+    <h2 id="lgpd">7. LGPD</h2>
+    <p>A prefeitura é a controladora dos dados, e o parceiro responde pelo uso que fizer deles. Cada chamada fica registrada com a chave, a rota, os filtros, a quantidade de registros, o IP e o horário. A prefeitura vê esse registro e pode revogar a chave na hora.</p>
+    <div class="nota">O escopo <b>pessoais</b> só é liberado com <b>finalidade e base legal</b> (convênio, lei ou ofício) e <b>validade de até 1 ano</b>. Cada chamada que devolve nome ou CPF/CNPJ entra no registro de acessos a dados pessoais da prefeitura. Use somente para a finalidade declarada e não repasse os dados a terceiros.</div>
+  </main>
+  <script src="/js/theme.js"></script>
+  <script>
+    const base = location.origin + '/api/externa/v1';
+    document.getElementById('base').textContent = base;
+    document.querySelectorAll('[data-ex]').forEach((p) => { p.textContent = p.textContent.split('{BASE}').join(base); });
+  </script>
+</body>
+</html>

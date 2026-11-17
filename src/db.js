@@ -35,6 +35,23 @@ if (isConfigured) {
   pool.on('error', (err) => console.error('[db] erro no pool:', err.message));
 }
 
+/**
+ * Endereço DIRETO do banco. No Neon, o endereço "-pooler" passa pelo PgBouncer
+ * em modo transação, que não mantém a sessão: um pg_advisory_lock (usado pelas
+ * migrations) pode ficar preso numa conexão do pool e travar o próximo deploy.
+ * Para essas operações de sessão, troca o host "-pooler" pelo direto.
+ */
+export function urlDireta(cs = connectionString) {
+  return String(cs || '').replace(/(@[^/@]*?)-pooler(\.)/, '$1$2');
+}
+/** Cliente avulso na conexão direta (feche com .end()). */
+export async function clienteDireto() {
+  const cs = urlDireta();
+  const client = new pg.Client({ connectionString: cs, ssl: sslConfig(cs), connectionTimeoutMillis: 20000 });
+  await client.connect();
+  return client;
+}
+
 export function getPool() {
   if (!pool) {
     throw new Error('DATABASE_URL nao configurada. Defina a variavel de ambiente.');

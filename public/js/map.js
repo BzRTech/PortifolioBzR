@@ -105,7 +105,8 @@ function buildPopup(id, p) {
       return `<div class="popup-title">Lote ${p.codigo || ''}</div>`
         + row('Uso', p.uso || '—') + row('Quadra', p.quadra || '—')
         + row('Bairro', p.bairro || '—') + row('Área', fmtArea(p.area_m2))
-        + `<a class="popup-bci" href="/bci/ficha.html?${q.toString()}" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏠 Preencher BCI →</a>`;
+        + `<a class="popup-bci" href="/bci/ficha.html?${q.toString()}" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏠 Preencher BCI →</a>`
+        + `<br><a class="popup-cib" href="/cib/?${new URLSearchParams({ q: p.codigo || '', ...(p.municipio ? { municipio: p.municipio } : {}) })}#imoveis" style="display:inline-block;margin-top:6px;font-size:12px;font-weight:700;color:var(--accent);text-decoration:none">🏛 Imóvel / CIB →</a>`;
     }
     case 'quadras':
       return `<div class="popup-title">Quadra ${p.codigo || ''}</div>`
@@ -218,6 +219,26 @@ export const gis = {
   },
 
   hasOverlay(id) { return Boolean(overlays[id]); },
+
+  /** Área visível com folga (fração), em [oeste, sul, leste, norte]. */
+  bbox(folga = 0.2) {
+    const b = map.getBounds().pad(folga);
+    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => Math.round(n * 1e5) / 1e5);
+  },
+  zoom() { return map.getZoom(); },
+  aoMover(fn) { let t; map.on('moveend', () => { clearTimeout(t); t = setTimeout(fn, 300); }); },
+  /** Aviso discreto sobre o mapa (ex.: "aproxime para ver os lotes"). */
+  aviso(texto) {
+    let el = document.getElementById('map-aviso');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'map-aviso';
+      el.style.cssText = 'position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:800;background:var(--card);color:var(--ink);border:1px solid var(--line-2);padding:6px 12px;font:12px var(--font-ui);box-shadow:var(--shadow);pointer-events:none;max-width:90%;text-align:center';
+      map.getContainer().appendChild(el);
+    }
+    el.textContent = texto || '';
+    el.style.display = texto ? '' : 'none';
+  },
 
   toggleOverlay(id, on) {
     overlayState[id] = on;

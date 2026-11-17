@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { query, withTransaction, isConfigured } from './db.js';
 import { requireAuth } from './auth.js';
 import { BCI_PADRAO } from './bci-catalog.js';
+import { capturarDeBci } from './cib.js';
 
 export const STATUS = ['rascunho', 'enviado', 'aprovado', 'rejeitado', 'arquivado'];
 export const AJUSTE_TIPOS = ['merge', 'desmembrar', 'redesenhar', 'reposicionar', 'outro'];
@@ -77,6 +78,13 @@ export async function ensureBciSchema() {
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bci_aberto_lote
                ON bci (lote_id) WHERE lote_id IS NOT NULL AND status IN ('rascunho','enviado')`);
 
+  await semearFormularioBci();
+  return true;
+}
+
+/** Formulário BCI padrão (dado de referência, idempotente) — chamado no boot, depois das migrations. */
+export async function semearFormularioBci() {
+  if (!isConfigured) return false;
   // Seed do formulario PADRAO (municipio NULL) se ainda nao existir.
   const { rows } = await query(`SELECT COUNT(*)::int AS n FROM bci_formulario WHERE municipio IS NULL AND ativo = TRUE`);
   if (rows[0].n === 0) {
@@ -114,7 +122,11 @@ function mapBci(b, fotos) {
 }
 
 export const bciRouter = Router();
-bciRouter.use(requireAuth); // aberto quando AUTH_ENABLED=false
+// Login só nas rotas do BCI (antes, sem prefixo, bloqueava Território e O.S.).
+bciRouter.use('/api/bci', requireAuth); // aberto quando AUTH_ENABLED=false
+// Ids são numéricos: /api/bci/qualquer-coisa responde 404 (e não 500 do banco).
+bciRouter.param('id', (req, res, next, id) => (/^\d{1,18}$/.test(id) ? next() : res.status(404).json({ error: 'BCI não encontrado.' })));
+bciRouter.param('fid', (req, res, next, id) => (/^\d{1,18}$/.test(id) ? next() : res.status(404).json({ error: 'Foto não encontrada.' })));
 
 // Formulario dinamico (definicao das secoes/campos).
 bciRouter.get('/api/bci/formulario', async (req, res) => {
@@ -261,7 +273,13 @@ bciRouter.patch('/api/bci/:id/status', async (req, res) => {
     if (acao === 'reabrir') { push('motivo_rejeicao', ''); }
     params.push(req.params.id);
     const { rows } = await query(`UPDATE bci SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
-    res.json(mapBci(rows[0], []));
+    // BCI aprovado = evento capturado no ciclo mensal do cadastro (CIB/Sinter).
+    let movimentacaoId = null;
+    if (acao === 'aprovar') {
+      const mov = await capturarDeBci(rows[0], req.user?.nome || String(req.body?.aprovadoPorNome || ''));
+      movimentacaoId = mov?.id || null;
+    }
+    res.json({ ...mapBci(rows[0], []), movimentacaoId });
   } catch (e) {
     if (String(e.message).includes('uq_bci_aberto_lote')) return res.status(409).json({ error: 'Já existe um BCI em aberto para este lote.' });
     res.status(500).json({ error: e.message });
