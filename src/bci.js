@@ -124,6 +124,9 @@ function mapBci(b, fotos) {
 export const bciRouter = Router();
 // Login só nas rotas do BCI (antes, sem prefixo, bloqueava Território e O.S.).
 bciRouter.use('/api/bci', requireAuth); // aberto quando AUTH_ENABLED=false
+// Ids são numéricos: /api/bci/qualquer-coisa responde 404 (e não 500 do banco).
+bciRouter.param('id', (req, res, next, id) => (/^\d{1,18}$/.test(id) ? next() : res.status(404).json({ error: 'BCI não encontrado.' })));
+bciRouter.param('fid', (req, res, next, id) => (/^\d{1,18}$/.test(id) ? next() : res.status(404).json({ error: 'Foto não encontrada.' })));
 
 // Formulario dinamico (definicao das secoes/campos).
 bciRouter.get('/api/bci/formulario', async (req, res) => {
