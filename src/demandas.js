@@ -88,7 +88,9 @@ async function comResponsaveis(demandas) {
 }
 
 export const demandasRouter = Router();
-demandasRouter.use(requireAuth);
+// Login só nas rotas deste módulo (um router.use sem prefixo pegaria TODAS as
+// requisições que passam por aqui, inclusive Território e O.S.).
+demandasRouter.use('/api/demandas', requireAuth);
 
 // Lista com filtros: status, equipe, prioridade, responsavel (=me para "minhas").
 demandasRouter.get('/api/demandas', async (req, res) => {

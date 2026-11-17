@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
+  <script src="/js/sessao.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Documento — BzR</title>
   <style>body{font-family:system-ui,sans-serif;background:#e9e7e1;color:#111;display:grid;place-items:center;min-height:100vh;margin:0}</style>
@@ -13,7 +14,8 @@
     // e o exibe nesta janela, pronto para imprimir/salvar em PDF.
     (async function () {
       const p = new URLSearchParams(location.search);
-      const url = p.get('comprovante') ? '/api/requerimentos/' + encodeURIComponent(p.get('comprovante')) + '/comprovante'
+      const url = p.get('previa') ? '/api/documentos/previa/relatorio-mensal?' + new URLSearchParams({ competencia: p.get('competencia') || '', municipio: p.get('municipio') || '' })
+        : p.get('comprovante') ? '/api/requerimentos/' + encodeURIComponent(p.get('comprovante')) + '/comprovante'
         : '/api/documentos/' + encodeURIComponent(p.get('id') || '') + '/html';
       const headers = {};
       const t = localStorage.getItem('bzr_token');

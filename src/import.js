@@ -273,7 +273,9 @@ export async function insertFeatures(layer, features, options = {}) {
       if (municipio) {
         await client.query(`DELETE FROM ${layer} WHERE municipio = $1`, [municipio]);
       } else {
-        await client.query(`TRUNCATE ${layer} RESTART IDENTITY`);
+        // DELETE (e não TRUNCATE): respeita as chaves estrangeiras — imóveis e BCIs
+        // vinculados a lotes ficam sem vínculo (ON DELETE SET NULL), nunca são apagados.
+        await client.query(`DELETE FROM ${layer}`);
       }
     }
 

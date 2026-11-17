@@ -174,6 +174,10 @@ export async function seedDemo({ truncate = true, log = () => {} } = {}) {
 
 // Executa apenas quando chamado diretamente (npm run seed), nao quando importado.
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain && process.env.NODE_ENV === 'production') {
+  console.error('Seed de demonstração bloqueado em produção (NODE_ENV=production).');
+  process.exit(1);
+}
 if (isMain) {
   (async () => {
     if (!isConfigured) {

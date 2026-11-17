@@ -1,6 +1,6 @@
-// Cria a extensao PostGIS, as tabelas e os indices.
-// Uso: npm run init-db
-import { ensureSchema } from '../src/schema.js';
+// Prepara o banco: aplica as migrations versionadas (migrations/*.sql).
+// Uso: npm run init-db   (equivale a npm run migrate)
+import { runMigrations } from '../src/migrate.js';
 import { healthcheck, closePool, isConfigured } from '../src/db.js';
 
 (async () => {
@@ -14,7 +14,8 @@ import { healthcheck, closePool, isConfigured } from '../src/db.js';
     process.exit(1);
   }
   console.log(`Conectado em "${hc.db}".`);
-  await ensureSchema();
+  const feitas = await runMigrations();
+  console.log(feitas.length ? `Migrations aplicadas: ${feitas.join(', ')}` : 'Banco já estava em dia.');
   const after = await healthcheck();
   console.log(`PostGIS: ${after.postgis || 'nao detectado'}`);
   console.log('Schema criado/atualizado com sucesso.');

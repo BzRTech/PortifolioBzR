@@ -8,7 +8,12 @@ import { query, withTransaction, isConfigured } from './db.js';
 import { requireAuth, requireRole } from './auth.js';
 import { TIPOS_DOC, catalogoPublico, renderDocumento, renderComprovante } from './doc-templates.js';
 import { getConfig, getImovelCompleto, buscarImovelPorInscricao, relatorioMensal, diagnostico, capturarMovimentacao, auditar } from './cib.js';
-import { soDigitos, mascararDoc, isoData, jsonCanonico } from './cib-validacao.js';
+import { mascararDoc, isoData, jcs, normalizarNi, niValido } from './cib-validacao.js';
+import { proximoNumero } from './numeradores.js';
+import { registrarAcesso, PERFIS_DADOS_PESSOAIS } from './lgpd.js';
+import { muniDe as muniDaInstancia } from './util.js';
+import { limitar, excedeu, contarFalha } from './ratelimit.js';
+import { PRODUCAO } from './env.js';
 
 // Tipos de requerimento e o que o deferimento dispara.
 export const TIPOS_REQ = {
@@ -26,7 +31,7 @@ export const TIPOS_REQ = {
 export const STATUS_REQ = ['protocolado', 'em_analise', 'pendente_documentacao', 'deferido', 'indeferido', 'concluido', 'arquivado'];
 const ABERTOS = ['protocolado', 'em_analise', 'pendente_documentacao'];
 
-const muniDe = (req) => String(req.query?.municipio ?? req.body?.municipio ?? '').trim();
+const muniDe = muniDaInstancia; // travado por instância quando MUNICIPIO está definido
 const nomeUsuario = (req) => String(req.user?.nome || req.body?.usuarioNome || 'Equipe').slice(0, 80);
 const erro = (status, msg) => Object.assign(new Error(msg), { status });
 const asyncRoute = (fn) => (req, res) => {
@@ -115,21 +120,21 @@ export async function emitirDocumento({ municipio, tipo, imovelId, inscricao, ca
   if (!t) throw erro(400, 'Tipo de documento inválido.');
   const cfg = await getConfig(municipio);
   let imovel = null;
-  if (imovelId) imovel = await getImovelCompleto(imovelId);
-  else if (inscricao) imovel = await buscarImovelPorInscricao(municipio, inscricao);
+  if (imovelId) imovel = await getImovelCompleto(imovelId, { incluirDoc: true });
+  else if (inscricao) imovel = await buscarImovelPorInscricao(municipio, inscricao, { incluirDoc: true });
   if ((imovelId || inscricao) && !imovel) throw erro(404, 'Imóvel não encontrado no cadastro deste município.');
   if (imovel && imovel.municipio !== municipio) throw erro(400, 'O imóvel pertence a outro município.');
   const base = await t.preparar({ municipio, cfg, imovel, campos, relatorioMensal, diagnostico });
   const { brasao, ...cfgSnap } = cfg;
   const conteudo = { ...base, cfg: cfgSnap, interessado: interessado || imovel?.contribuinteNome || '', emissor: { nome: usuario, responsavelNome: cfg.responsavelNome } };
-  const conteudoDb = JSON.parse(JSON.stringify(conteudo)); // o que o JSONB vai guardar
-  const hash = crypto.createHash('sha256').update(jsonCanonico(conteudoDb)).digest('hex');
+  // Integridade: SHA-256 sobre o JCS (RFC 8785) do conteúdo exatamente como o JSONB guarda.
+  const conteudoDb = JSON.parse(JSON.stringify(conteudo));
+  const hash = crypto.createHash('sha256').update(jcs(conteudoDb), 'utf8').digest('hex');
   const ano = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Recife', year: 'numeric' }).format(new Date()));
   const validade = t.validade ? new Date(Date.now() + (cfg.validadeCertidaoDias || 90) * 86400000).toISOString().slice(0, 10) : null;
   const titulo = base.tituloLivre || t.titulo;
   return withTransaction(async (db) => {
-    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`doc:${municipio}:${tipo}:${ano}`]);
-    const seq = (await db.query('SELECT COALESCE(MAX(seq),0)::int + 1 AS n FROM documentos WHERE municipio = $1 AND tipo = $2 AND ano = $3', [municipio, tipo, ano])).rows[0].n;
+    const seq = await proximoNumero(db, 'documento', `${municipio}|${tipo}`, ano);
     const numero = `${String(seq).padStart(4, '0')}/${ano}`;
     let codigo = gerarCodigo();
     for (let i = 0; i < 3; i++) {
@@ -139,8 +144,8 @@ export async function emitirDocumento({ municipio, tipo, imovelId, inscricao, ca
     }
     const { rows } = await db.query(
       `INSERT INTO documentos (municipio, tipo, numero, seq, ano, titulo, imovel_id, inscricao, requerimento_id, interessado, conteudo, hash_conteudo,
-         codigo_validacao, emitido_por_nome, validade)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15) RETURNING *`,
+         codigo_validacao, emitido_por_nome, validade, hash_alg)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,'sha256/jcs-rfc8785') RETURNING *`,
       [municipio, tipo, numero, seq, ano, titulo, imovel?.id || null, imovel?.inscricao || '', requerimentoId, conteudo.interessado,
         JSON.stringify(conteudo), hash, codigo, usuario, validade]
     );
@@ -159,7 +164,7 @@ function mapDoc(d) {
 function mapReq(r) {
   return {
     id: r.id, municipio: r.municipio, numero: r.numero, tipo: r.tipo, tipoLabel: TIPOS_REQ[r.tipo]?.label || r.tipo, documentoTipo: r.documento_tipo,
-    requerenteNome: r.requerente_nome, requerenteDoc: r.requerente_doc, requerenteDocMascarado: mascararDoc(r.requerente_doc),
+    requerenteNome: r.requerente_nome, requerenteDocMascarado: mascararDoc(r.requerente_doc),
     requerenteEmail: r.requerente_email, requerenteTelefone: r.requerente_telefone, imovelId: r.imovel_id, inscricao: r.inscricao,
     descricao: r.descricao, dados: r.dados, status: r.status, prazo: isoData(r.prazo), responsavelNome: r.responsavel_nome, parecer: r.parecer,
     documentoId: r.documento_id, movimentacaoId: r.movimentacao_id, demandaId: r.demanda_id, historico: r.historico || [],
@@ -180,13 +185,14 @@ export const documentosRouter = Router();
 const gestor = requireRole('admin', 'coordenador');
 
 // ---- publico (sem login) ---------------------------------------------------
-documentosRouter.get('/api/publico/validar/:codigo', asyncRoute(async (req, res) => {
+const limitePublico = limitar({ nome: 'publico', janelaMs: 60000, max: 30 });
+documentosRouter.get('/api/publico/validar/:codigo', limitePublico, asyncRoute(async (req, res) => {
   const codigo = String(req.params.codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const fmt = codigo.length === 12 ? `${codigo.slice(0, 4)}-${codigo.slice(4, 8)}-${codigo.slice(8)}` : codigo;
   const { rows } = await query('SELECT * FROM documentos WHERE codigo_validacao = $1', [fmt]);
   const d = rows[0];
   if (!d) return res.status(404).json({ valido: false, error: 'Nenhum documento encontrado com este código.' });
-  const integro = crypto.createHash('sha256').update(jsonCanonico(d.conteudo)).digest('hex') === d.hash_conteudo;
+  const integro = crypto.createHash('sha256').update(jcs(d.conteudo), 'utf8').digest('hex') === d.hash_conteudo;
   const vencido = d.validade && new Date(isoData(d.validade) + 'T23:59:59-03:00') < new Date();
   const cfg = await getConfig(d.municipio);
   res.json({
@@ -197,7 +203,7 @@ documentosRouter.get('/api/publico/validar/:codigo', asyncRoute(async (req, res)
   });
 }));
 // Versao publica do documento (CPF/CNPJ mascarado — LGPD).
-documentosRouter.get('/api/publico/documento/:codigo', asyncRoute(async (req, res) => {
+documentosRouter.get('/api/publico/documento/:codigo', limitePublico, asyncRoute(async (req, res) => {
   const { rows } = await query(`SELECT d.*, r.numero AS requerimento_numero FROM documentos d LEFT JOIN requerimentos r ON r.id = d.requerimento_id
     WHERE d.codigo_validacao = $1`, [String(req.params.codigo || '').toUpperCase()]);
   if (!rows[0]) return res.status(404).send('Documento não encontrado.');
@@ -205,13 +211,21 @@ documentosRouter.get('/api/publico/documento/:codigo', asyncRoute(async (req, re
   res.type('html').send(renderDocumento(rows[0], { cfg, origem: origemDe(req), mascarar: true }));
 }));
 // Consulta de andamento de protocolo (numero + CPF/CNPJ do requerente).
-documentosRouter.get('/api/publico/protocolo', asyncRoute(async (req, res) => {
-  const numero = String(req.query.numero || '').trim();
-  const doc = soDigitos(req.query.doc);
-  if (!numero || doc.length < 11) throw erro(400, 'Informe o número do protocolo e o CPF/CNPJ do requerente.');
-  const { rows } = await query('SELECT * FROM requerimentos WHERE numero = $1 AND requerente_doc = $2', [numero, doc]);
+// Anti-enumeração: 10 consultas/15 min por IP; 5 falhas/hora por IP; 5 falhas/hora por protocolo (qualquer IP).
+const JANELA_FALHAS = 3600000;
+documentosRouter.get('/api/publico/protocolo', limitar({ nome: 'protocolo', janelaMs: 15 * 60000, max: 10 }), asyncRoute(async (req, res) => {
+  const numero = String(req.query.numero || '').trim().slice(0, 20);
+  const doc = normalizarNi(req.query.doc);
+  if (!/^\d{4}\/\d{1,6}$/.test(numero) || !niValido(doc)) throw erro(400, 'Informe o número do protocolo (AAAA/NNNNN) e um CPF/CNPJ válido.');
+  const chaveIp = `protfalha-ip:${req.ip}`, chaveNum = `protfalha-num:${numero}`;
+  const espera = Math.max(excedeu(chaveIp, { janelaMs: JANELA_FALHAS, max: 5 }), excedeu(chaveNum, { janelaMs: JANELA_FALHAS, max: 5 }));
+  if (espera) { res.set('Retry-After', String(espera)); throw erro(429, 'Muitas tentativas sem sucesso. Aguarde e tente novamente.'); }
+  const { rows } = await query('SELECT * FROM requerimentos WHERE numero = $1 AND requerente_doc = $2 AND municipio = $3', [numero, doc, muniDe(req)]);
   const r = rows[0];
-  if (!r) throw erro(404, 'Protocolo não encontrado para este CPF/CNPJ.');
+  if (!r) {
+    contarFalha(chaveIp, JANELA_FALHAS); contarFalha(chaveNum, JANELA_FALHAS);
+    throw erro(404, 'Não encontramos protocolo com esses dados.');
+  }
   let documento = null;
   if (r.documento_id) {
     const d = (await query('SELECT titulo, numero, codigo_validacao, status FROM documentos WHERE id = $1', [r.documento_id])).rows[0];
@@ -253,9 +267,12 @@ documentosRouter.post('/api/documentos', gestor, asyncRoute(async (req, res) => 
 
 documentosRouter.get('/api/documentos/:id/html', asyncRoute(async (req, res) => {
   const d = await carregarDoc(req.params.id);
-  if (!d) throw erro(404, 'Documento não encontrado.');
+  if (!d || d.municipio !== muniDe(req)) throw erro(404, 'Documento não encontrado.');
   const cfg = await getConfig(d.municipio);
-  res.type('html').send(renderDocumento(d, { cfg, origem: origemDe(req), barra: req.query.barra !== '0' }));
+  // Perfil sem acesso a dado pessoal (gestor) vê a versão mascarada; os demais acessos ficam registrados.
+  const mascarar = Boolean(req.user?.role && req.user.role !== 'anon' && !PERFIS_DADOS_PESSOAIS.includes(req.user.role));
+  if (!mascarar) await registrarAcesso(req, { municipio: d.municipio, entidade: 'documento', entidadeId: d.id, dado: 'documento com CPF/CNPJ', finalidade: 'visualização/impressão' });
+  res.type('html').send(renderDocumento(d, { cfg, origem: origemDe(req), barra: req.query.barra !== '0', mascarar }));
 }));
 
 documentosRouter.post('/api/documentos/:id/cancelar', gestor, asyncRoute(async (req, res) => {
@@ -286,6 +303,28 @@ documentosRouter.get('/api/requerimentos', asyncRoute(async (req, res) => {
   res.json(rows.map(mapReq));
 }));
 
+// LGPD: CPF/CNPJ completo do requerente só com finalidade, e o acesso fica registrado.
+documentosRouter.post('/api/requerimentos/:id/revelar', asyncRoute(async (req, res) => {
+  if (req.user?.role && req.user.role !== 'anon' && !PERFIS_DADOS_PESSOAIS.includes(req.user.role)) throw erro(403, 'Seu perfil não acessa dados pessoais completos.');
+  const finalidade = String(req.body?.finalidade || '').trim();
+  if (finalidade.length < 3) throw erro(400, 'Informe a finalidade do acesso ao dado pessoal.');
+  const r = (await query('SELECT id, municipio, requerente_doc FROM requerimentos WHERE id = $1', [req.params.id])).rows[0];
+  if (!r || r.municipio !== muniDe(req)) throw erro(404, 'Requerimento não encontrado.');
+  await registrarAcesso(req, { municipio: r.municipio, entidade: 'requerimento', entidadeId: r.id, dado: 'CPF/CNPJ do requerente', finalidade });
+  res.json({ requerenteDoc: r.requerente_doc });
+}));
+
+// Prévia do relatório mensal (sem número/validade) — para o gestor acompanhar sem emitir documento.
+documentosRouter.get('/api/documentos/previa/relatorio-mensal', asyncRoute(async (req, res) => {
+  const m = muniDe(req);
+  const cfg = await getConfig(m);
+  const t = TIPOS_DOC.relatorio_mensal;
+  const base = await t.preparar({ municipio: m, cfg, imovel: null, campos: { competencia: req.query.competencia }, relatorioMensal, diagnostico });
+  const { brasao, ...cfgSnap } = cfg;
+  const doc = { tipo: 'relatorio_mensal', titulo: t.titulo, numero: 'PRÉVIA', status: 'previa', conteudo: { ...base, cfg: cfgSnap }, emitido_em: new Date(), emitido_por_nome: req.user?.nome || '', codigo_validacao: '' };
+  res.type('html').send(renderDocumento(doc, { cfg, origem: origemDe(req), previa: true }));
+}));
+
 documentosRouter.get('/api/requerimentos/:id', asyncRoute(async (req, res) => {
   const r = (await query('SELECT * FROM requerimentos WHERE id = $1', [req.params.id])).rows[0];
   if (!r) throw erro(404, 'Requerimento não encontrado.');
@@ -298,8 +337,8 @@ documentosRouter.post('/api/requerimentos', asyncRoute(async (req, res) => {
   const t = TIPOS_REQ[b.tipo];
   if (!t) throw erro(400, 'Tipo de requerimento inválido.');
   if (!String(b.requerenteNome || '').trim()) throw erro(400, 'Informe o nome do requerente.');
-  const doc = soDigitos(b.requerenteDoc);
-  if (doc.length !== 11 && doc.length !== 14) throw erro(400, 'Informe o CPF/CNPJ do requerente.');
+  const doc = normalizarNi(b.requerenteDoc);
+  if (!niValido(doc)) throw erro(400, 'Informe um CPF/CNPJ válido do requerente (CNPJ alfanumérico aceito).');
   if (b.tipo === 'certidao' && !TIPOS_DOC[b.documentoTipo]) throw erro(400, 'Escolha qual certidão/declaração está sendo requerida.');
   let imovelId = null, inscricao = String(b.inscricao || '').trim();
   if (inscricao) {
@@ -310,9 +349,8 @@ documentosRouter.post('/api/requerimentos', asyncRoute(async (req, res) => {
   const prazo = b.prazo || new Date(Date.now() + t.prazoDias * 86400000).toISOString().slice(0, 10);
   const usuario = nomeUsuario(req);
   const r = await withTransaction(async (db) => {
-    const ano = new Date().getFullYear();
-    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`req:${m}:${ano}`]);
-    const n = (await db.query(`SELECT COUNT(*)::int + 1 AS n FROM requerimentos WHERE municipio = $1 AND numero LIKE $2`, [m, `${ano}/%`])).rows[0].n;
+    const ano = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Recife', year: 'numeric' }).format(new Date()));
+    const n = await proximoNumero(db, 'protocolo', m, ano);
     const numero = `${ano}/${String(n).padStart(5, '0')}`;
     const { rows } = await db.query(
       `INSERT INTO requerimentos (municipio, numero, tipo, documento_tipo, requerente_nome, requerente_doc, requerente_email, requerente_telefone,

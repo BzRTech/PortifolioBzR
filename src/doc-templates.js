@@ -113,8 +113,8 @@ export const TIPOS_DOC = {
     titulo: 'Certidão de Valor Venal', grupo: 'Certidões', imovel: true, validade: true,
     preparar(ctx) {
       const im = exigirImovel(ctx);
-      if (im.valorVenal == null) throw erro('Valor venal não calculado. Cadastre a Planta Genérica de Valores (PGV) do município.');
-      return { imovel: snapImovel(im), exercicio: new Date().getFullYear() };
+      if (im.valorVenal == null || !im.valorVenalAno) throw erro('Valor venal não calculado: publique um exercício da Planta Genérica de Valores (PGV).');
+      return { imovel: snapImovel(im), exercicio: im.valorVenalAno };
     },
     corpo(c, o) {
       const im = c.imovel;
@@ -340,7 +340,7 @@ const CSS = `
  * Monta a pagina HTML completa (A4) de um documento emitido.
  * opts: { cfg (configuracao atual, para o brasao), origem (URL base), mascarar, barra }
  */
-export function renderDocumento(doc, { cfg, origem = '', mascarar = false, barra = true } = {}) {
+export function renderDocumento(doc, { cfg, origem = '', mascarar = false, barra = true, previa = false } = {}) {
   const t = TIPOS_DOC[doc.tipo];
   const c = doc.conteudo || {};
   const cfgDoc = { ...(c.cfg || {}), brasao: cfg?.brasao || '' };
@@ -355,7 +355,7 @@ export function renderDocumento(doc, { cfg, origem = '', mascarar = false, barra
 <title>${esc(titulo)} nº ${esc(doc.numero)}</title><style>${CSS}</style></head><body>
 ${barra ? `<div class="barra"><button class="sec" onclick="history.length>1?history.back():window.close()">Voltar</button><button onclick="window.print()">Imprimir / salvar PDF</button></div>` : ''}
 <div class="folha">
-  ${doc.status === 'cancelado' ? '<div class="marca">CANCELADO</div><div class="selo cancelado">CANCELADO</div>' : (t?.minuta ? '<div class="selo minuta">MINUTA</div>' : '')}
+  ${previa ? '<div class="marca" style="color:rgba(163,106,16,.12)">PRÉVIA</div><div class="selo minuta">PRÉVIA — SEM VALOR DE DOCUMENTO</div>' : doc.status === 'cancelado' ? '<div class="marca">CANCELADO</div><div class="selo cancelado">CANCELADO</div>' : (t?.minuta ? '<div class="selo minuta">MINUTA</div>' : '')}
   <div class="cab">${brasao}<div class="ent"><strong>${esc(cfgDoc.nomeOficial)}</strong><span>${esc(cfgDoc.secretaria)}</span><span>${esc(cfgDoc.setor)}</span>
     ${cfgDoc.cnpj ? `<span>CNPJ ${esc(formatarDoc(cfgDoc.cnpj))}</span>` : ''}</div></div>
   <h1>${esc(titulo)}</h1>
@@ -365,10 +365,10 @@ ${barra ? `<div class="barra"><button class="sec" onclick="history.length>1?hist
   <p class="local">${esc(cidade)}${cfgDoc.uf ? ' – ' + esc(cfgDoc.uf) : ''}, ${dataExtenso(doc.emitido_em)}.</p>
   <div class="assina"><strong>${esc(ass.nome || '________________________')}</strong><small>${esc(ass.cargo || '')}</small>
     <small>Emitido eletronicamente por ${esc(doc.emitido_por_nome || '—')}</small></div>
-  <div class="valida">${qrSvg(urlValida)}<div>Autenticidade: acesse <strong>${esc(urlValida.replace(/^https?:\/\//, ''))}</strong><br>
+  ${previa ? '<div class="valida"><div>Prévia gerada para acompanhamento. Para valer como documento, emita o relatório (numerado, com código de validação).</div></div>' : `<div class="valida">${qrSvg(urlValida)}<div>Autenticidade: acesse <strong>${esc(urlValida.replace(/^https?:\/\//, ''))}</strong><br>
     ou informe o código <code>${esc(doc.codigo_validacao)}</code> na página de validação.<br>
     Emitido em ${new Date(doc.emitido_em).toLocaleString('pt-BR', { timeZone: 'America/Recife' })}${validade}.<br>
-    Integridade (SHA-256): ${esc(String(doc.hash_conteudo || '').slice(0, 32))}…</div></div>
+    Integridade (SHA-256/JCS): ${esc(String(doc.hash_conteudo || '').slice(0, 32))}…</div></div>`}
   <div class="rodape">${esc(cfgDoc.endereco || '')}${cfgDoc.telefone ? ' · ' + esc(cfgDoc.telefone) : ''}${cfgDoc.email ? ' · ' + esc(cfgDoc.email) : ''}
     ${cfgDoc.rodapeDocumentos ? '<br>' + esc(cfgDoc.rodapeDocumentos) : ''}</div>
 </div></body></html>`;

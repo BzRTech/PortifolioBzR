@@ -78,6 +78,13 @@ export async function ensureBciSchema() {
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bci_aberto_lote
                ON bci (lote_id) WHERE lote_id IS NOT NULL AND status IN ('rascunho','enviado')`);
 
+  await semearFormularioBci();
+  return true;
+}
+
+/** Formulário BCI padrão (dado de referência, idempotente) — chamado no boot, depois das migrations. */
+export async function semearFormularioBci() {
+  if (!isConfigured) return false;
   // Seed do formulario PADRAO (municipio NULL) se ainda nao existir.
   const { rows } = await query(`SELECT COUNT(*)::int AS n FROM bci_formulario WHERE municipio IS NULL AND ativo = TRUE`);
   if (rows[0].n === 0) {
@@ -115,7 +122,8 @@ function mapBci(b, fotos) {
 }
 
 export const bciRouter = Router();
-bciRouter.use(requireAuth); // aberto quando AUTH_ENABLED=false
+// Login só nas rotas do BCI (antes, sem prefixo, bloqueava Território e O.S.).
+bciRouter.use('/api/bci', requireAuth); // aberto quando AUTH_ENABLED=false
 
 // Formulario dinamico (definicao das secoes/campos).
 bciRouter.get('/api/bci/formulario', async (req, res) => {

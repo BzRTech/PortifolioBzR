@@ -57,6 +57,10 @@ export async function seedDemandasDemo({ truncate = false, log = () => {} } = {}
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain && process.env.NODE_ENV === 'production') {
+  console.error('Seed de demonstração bloqueado em produção (NODE_ENV=production).');
+  process.exit(1);
+}
 if (isMain) {
   (async () => {
     if (!isConfigured) { console.error('DATABASE_URL não configurada.'); process.exit(1); }

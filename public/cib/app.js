@@ -19,7 +19,7 @@ async function render() {
   const v = el('view');
   v.innerHTML = '<div class="vazio">Carregando…</div>';
   try {
-    await ({ painel, imoveis, ciclo, remessas, conciliacao, vistoria, implantacao, pgv, config, auditoria }[S.tab] || painel)(v, S.params || {});
+    await ({ painel, imoveis, ciclo, remessas, conciliacao, vistoria, implantacao, pgv, config, auditoria, usuarios }[S.tab] || painel)(v, S.params || {});
   } catch (e) { v.innerHTML = `<div class="vazio">Erro: ${esc(e.message)}</div>`; }
   atualizarBadges();
 }
@@ -62,7 +62,7 @@ async function painel(v) {
   const statusTxt = p.diasPrazo > 0 ? `Faltam <strong style="display:inline">${p.diasPrazo} dias</strong> para o prazo legal de integração ao Sinter.` : 'Prazo legal encerrado — a obrigação continua: cada mudança no imóvel precisa chegar ao Sinter.';
   v.innerHTML = `
     ${cabecalho('Painel do cadastro', `${esc(G.municipio || 'Município')}`, `Competência atual: ${esc(G.nomeComp(p.competencia))} · Implantação na etapa ${p.etapaImplantacao} de 5.`,
-      `<button class="b" id="bt-diag">Diagnóstico</button><button class="b pri" id="bt-rel">Relatório mensal</button>`)}
+      `<button class="b" id="bt-diag">Diagnóstico</button><button class="b pri leitura" id="bt-rel">Relatório mensal</button>`)}
     <div class="prazo-bar"><div class="cal"><small>${['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'][Number(prazo[1]) - 1]} · ${prazo[0]}</small><b>${prazo[2]}</b></div>
       <p><strong>O problema não é o prazo. É o dia seguinte a ele.</strong>${statusTxt}</p>
       <button class="b sm" data-go="implantacao">Ver implantação →</button></div>
@@ -98,7 +98,7 @@ async function painel(v) {
       </div>
     </div>`;
   v.querySelectorAll('[data-go]').forEach((b) => (b.onclick = () => irPara(b.dataset.go, b.dataset.p ? { status: b.dataset.p } : {})));
-  el('passo-contas').onclick = el('bt-rel').onclick = () => emitirDoc('relatorio_mensal', { campos: { competencia: G.compAtual() } });
+  el('passo-contas').onclick = el('bt-rel').onclick = () => (G.user?.role === 'gestor' ? window.open(`/documentos/ver.html?previa=relatorio-mensal&competencia=${G.compAtual()}&municipio=${encodeURIComponent(G.municipio)}`, '_blank') : emitirDoc('relatorio_mensal', { campos: { competencia: G.compAtual() } }));
   el('bt-diag').onclick = () => irPara('implantacao');
   const m = mapaBase(el('mp'));
   if (mapa.length) {
@@ -123,10 +123,10 @@ async function emitirDoc(tipo, { imovelId, campos } = {}) {
 async function imoveis(v, params) {
   const f = { q: params.q || '', status: params.status || '', situacao: params.situacao || '', regra: params.regra || '', offset: 0 };
   v.innerHTML = `${cabecalho('Cadastro imobiliário', 'Imóveis', 'Inscrição municipal ligada ao lote do CTM e ao CIB. Cada alteração em imóvel já conhecido do Sinter vira automaticamente uma movimentação a transmitir.',
-    `<button class="b" id="bt-reval">↻ Revalidar base</button><button class="b" id="bt-imp">⬆ Importar base (CSV)</button><button class="b pri" id="bt-novo">＋ Novo imóvel</button>`)}
+    `<button class="b w" id="bt-reval">↻ Revalidar base</button><button class="b" id="bt-hist">Importações</button><button class="b w" id="bt-imp">⬆ Importar base (CSV)</button><button class="b pri w" id="bt-novo">＋ Novo imóvel</button>`)}
     <div class="toolbar2">
-      <input type="search" id="q" placeholder="Inscrição, CIB, logradouro, contribuinte, CPF/CNPJ…" value="${esc(f.q)}" />
-      <select id="fs"><option value="">Todo status Sinter</option>${['pendente_correcao', 'pronto', 'aguardando_envio', 'enviado', 'conciliado', 'divergente', 'baixado'].map((s) => `<option value="${s}" ${f.status === s ? 'selected' : ''}>${G.ROT[s]}</option>`).join('')}</select>
+      <input type="search" id="q" placeholder="Inscrição, CIB, logradouro, contribuinte, CPF/CNPJ (inclusive alfanumérico)…" value="${esc(f.q)}" />
+      <select id="fs"><option value="">Todo status Sinter</option>${['pendente_correcao', 'pronto', 'aguardando_envio', 'enviado', 'rejeitado', 'conciliado', 'divergente', 'baixado'].map((s) => `<option value="${s}" ${f.status === s ? 'selected' : ''}>${G.ROT[s]}</option>`).join('')}</select>
       <select id="fsit"><option value="">Ativos e baixados</option><option value="ativo">Ativos</option><option value="baixado">Baixados</option></select>
       <select id="fr"><option value="">Qualquer pendência</option></select>
     </div>
@@ -160,6 +160,7 @@ async function imoveis(v, params) {
   el('pg-p').onclick = () => { f.offset += 50; carregar(); };
   el('bt-novo').onclick = () => formImovel(null, carregar);
   el('bt-imp').onclick = () => importarBase(carregar);
+  el('bt-hist').onclick = () => historicoImportacoes().catch(G.falha);
   el('bt-reval').onclick = async () => {
     try { const r = await G.post('/api/cib/revalidar'); G.toast(`${r.revalidados} imóveis revalidados · ${r.diagnostico.imoveis.pctProntos}% prontos para o Sinter.`); carregar(); }
     catch (e) { G.falha(e); }
@@ -167,55 +168,94 @@ async function imoveis(v, params) {
   await carregar();
 }
 
-function camposForm(im) {
+// Tabelas de domínio do Sinter (carregadas uma vez).
+let DOM = null;
+async function dominios() { if (!DOM) DOM = await G.get('/api/cib/sinter/dominios'); return DOM; }
+const opcoesDom = (tab, atual, vazio = '— selecione —') => `<option value="">${vazio}</option>` + Object.entries(tab || {}).map(([k, v]) => `<option value="${k}" ${String(atual ?? '') === k ? 'selected' : ''}>${k.padStart(2, '0')} · ${esc(v)}</option>`).join('');
+
+function camposForm(im, D) {
   const val = (k) => esc(im?.[k] ?? '');
   const sel = (k, ops) => `<select name="${k}">${ops.map(([v, l]) => `<option value="${v}" ${String(im?.[k] ?? '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  return `<div class="f c3">
-    <label>Inscrição *<input name="inscricao" value="${val('inscricao')}" required /></label>
+  return `<div class="grupo-t" style="margin-top:0">Identificação</div><div class="f c3">
+    <label>Inscrição *<input name="inscricao" value="${val('inscricao')}" required maxlength="45" /></label>
     <label>Código do lote (CTM)<input name="lote_codigo" value="${val('lote_codigo')}" placeholder="vincula a geometria" /></label>
-    <label>Tipo${sel('tipo', [['predial', 'Predial'], ['territorial', 'Territorial']])}</label>
-    <label>Uso<input name="uso" value="${val('uso')}" list="usos" /></label>
+    <label>Tipo do imóvel (Sinter) *${sel('tipo', [['predial', '02 · Predial (com edificação)'], ['territorial', '01 · Territorial (sem edificação)'], ['especial', '03 · Bem de características especiais']])}</label>
+    <label>Tipo arquitetônico (predial) *<select name="tp_arquitetonico">${opcoesDom(D.tipoArquitetonico, im?.tp_arquitetonico)}</select></label>
+    <label>Destinação (predial) *<select name="destinacao">${opcoesDom(D.destinacao, im?.destinacao, '— deduzir do uso —')}</select></label>
+    <label>BICE (só tipo 03)<select name="bice">${opcoesDom(D.bice, im?.bice, '—')}</select></label>
+    <label>Uso (texto municipal)<input name="uso" value="${val('uso')}" list="usos" /></label>
     <label>Setor<input name="setor" value="${val('setor')}" /></label>
     <label>Quadra / Lote<span style="display:flex;gap:6px"><input name="quadra" value="${val('quadra')}" style="flex:1" /><input name="lote_num" value="${val('lote_num')}" style="flex:1" /></span></label>
-    <label class="full" style="grid-column:span 2">Logradouro *<input name="logradouro" value="${val('logradouro')}" /></label>
-    <label>Número<input name="numero" value="${val('numero')}" placeholder="ou S/N" /></label>
-    <label>Complemento<input name="complemento" value="${val('complemento')}" /></label>
-    <label>Bairro *<input name="bairro" value="${val('bairro')}" /></label>
-    <label>CEP<input name="cep" value="${val('cep')}" inputmode="numeric" /></label>
-    <label class="full" style="grid-column:span 2">Contribuinte *<input name="contribuinte_nome" value="${val('contribuinte_nome')}" /></label>
-    <label>CPF/CNPJ *<input name="contribuinte_doc" value="${val('contribuinte_doc')}" inputmode="numeric" /></label>
+  </div>
+  <div class="grupo-t">Endereço</div><div class="f c3">
+    <label>Tipo de logradouro *<select name="tipo_logradouro">${opcoesDom(D.tipoLogradouro, im?.tipo_logradouro, '— deduzir do nome —')}</select></label>
+    <label style="grid-column:span 2">Logradouro *<input name="logradouro" value="${val('logradouro')}" /></label>
+    <label>Número (até 8)<input name="numero" value="${val('numero')}" placeholder="ou S/N" maxlength="8" /></label>
+    <label>Complemento (até 30)<input name="complemento" value="${val('complemento')}" maxlength="30" /></label>
+    <label>CEP *<input name="cep" value="${val('cep')}" inputmode="numeric" /></label>
+    <label>Bairro (até 30) *<input name="bairro" value="${val('bairro')}" maxlength="30" /></label>
+    <label>Tem bairro (divisão política)<select name="tem_bairro"><option value="">deduzir</option><option value="true" ${im?.tem_bairro === true ? 'selected' : ''}>sim</option><option value="false" ${im?.tem_bairro === false ? 'selected' : ''}>não</option></select></label>
+  </div>
+  <div class="grupo-t">Titular (grupo opcional do Sinter — enviado só completo)</div><div class="f c3">
+    <label style="grid-column:span 2">Contribuinte / titular<input name="contribuinte_nome" value="${val('contribuinte_nome')}" /></label>
+    <label>CPF/CNPJ (aceita CNPJ alfanumérico)<span style="display:flex;gap:6px"><input name="contribuinte_doc" value="" placeholder="${esc(im?.contribuinteDocMascarado || 'novo valor')}" style="flex:1" autocomplete="off" />${im?.id ? '<button type="button" class="b sm" id="bt-rev">ver</button>' : ''}</span></label>
+    <label>Tipo de titularidade<select name="titular_tipo">${opcoesDom(D.tipoTitularidade, im?.titular_tipo, '—')}</select></label>
+    <label>Documento de titularidade<select name="titular_doc_tipo">${opcoesDom(D.docTitularidade, im?.titular_doc_tipo, '—')}</select></label>
+    <label>Data de aquisição<input type="date" name="titular_dt_aquisicao" value="${val('titular_dt_aquisicao')}" /></label>
+    <label>Percentual (1 = 100%)<input name="titular_perc" value="${val('titular_perc')}" inputmode="decimal" placeholder="1" /></label>
     <label>E-mail<input name="contribuinte_email" value="${val('contribuinte_email')}" type="email" /></label>
     <label>Telefone<input name="contribuinte_telefone" value="${val('contribuinte_telefone')}" /></label>
-    <label>Matrícula / Cartório<span style="display:flex;gap:6px"><input name="matricula_cartorio" value="${val('matricula_cartorio')}" style="flex:1" /><input name="cartorio" value="${val('cartorio')}" style="flex:1.4" /></span></label>
+  </div>
+  <div class="grupo-t">Registro de imóveis</div><div class="f c3">
+    <label>CNM — Código Nacional de Matrícula (16 dígitos)<input name="cnm_ri" value="${val('cnm_ri')}" inputmode="numeric" maxlength="20" /></label>
+    <label>Matrícula<input name="matricula_cartorio" value="${val('matricula_cartorio')}" /></label>
+    <label>Cartório / CNS<span style="display:flex;gap:6px"><input name="cartorio" value="${val('cartorio')}" style="flex:2" /><input name="cns_ri" value="${val('cns_ri')}" style="flex:1" placeholder="CNS" /></span></label>
+  </div>
+  <div class="grupo-t">Áreas e construção</div><div class="f c3">
     <label>Área do terreno (m²) *<input name="area_terreno_m2" value="${val('area_terreno_m2')}" inputmode="decimal" /></label>
     <label>Área construída (m²)<input name="area_construida_m2" value="${val('area_construida_m2')}" inputmode="decimal" /></label>
     <label>Testada (m)<input name="testada_m" value="${val('testada_m')}" inputmode="decimal" /></label>
     <label>Pavimentos<input name="n_pavimentos" value="${val('n_pavimentos')}" inputmode="numeric" /></label>
-    <label>Padrão construtivo${sel('padrao_construtivo', [['baixo', 'Baixo'], ['medio', 'Médio'], ['alto', 'Alto'], ['luxo', 'Luxo']])}</label>
-    <label>Ano de construção<input name="ano_construcao" value="${val('ano_construcao')}" inputmode="numeric" /></label>
+    <label>Padrão construtivo${sel('padrao_construtivo', [['popular', '01 · Popular'], ['baixo', '02 · Baixo'], ['normal', '03 · Normal'], ['alto', '04 · Alto'], ['luxo', '05 · Luxo']])}</label>
+    <label>Ano de construção<input name="ano_construcao" value="${val('ano_construcao')}" inputmode="numeric" maxlength="4" /></label>
     <label class="full">Observações<textarea name="observacoes">${val('observacoes')}</textarea></label>
   </div><datalist id="usos"><option>Residencial</option><option>Comercial</option><option>Misto</option><option>Industrial</option><option>Institucional</option><option>Terreno vazio</option></datalist>`;
 }
 const lerForm = (raiz) => Object.fromEntries([...raiz.querySelectorAll('[name]')].map((i) => [i.name, i.value]));
-// Converte o imovel (camelCase da API) para os nomes de coluna do formulario.
+// Imóvel (camelCase da API) → nomes de coluna do formulário.
 const paraForm = (i) => i && ({
+  id: i.id, contribuinteDocMascarado: i.contribuinteDocMascarado,
   inscricao: i.inscricao, lote_codigo: i.loteCodigo, tipo: i.tipo, uso: i.uso, setor: i.setor, quadra: i.quadra, lote_num: i.loteNum,
-  logradouro: i.logradouro, numero: i.numero, complemento: i.complemento, bairro: i.bairro, cep: i.cep,
-  contribuinte_nome: i.contribuinteNome, contribuinte_doc: i.contribuinteDoc, contribuinte_email: i.contribuinteEmail, contribuinte_telefone: i.contribuinteTelefone,
-  matricula_cartorio: i.matriculaCartorio, cartorio: i.cartorio, area_terreno_m2: i.areaTerreno, area_construida_m2: i.areaConstruida,
-  testada_m: i.testada, n_pavimentos: i.nPavimentos, padrao_construtivo: i.padraoConstrutivo, ano_construcao: i.anoConstrucao, observacoes: i.observacoes,
+  logradouro: i.logradouro, numero: i.numero, complemento: i.complemento, bairro: i.bairro, cep: i.cep, tem_bairro: i.temBairro,
+  tipo_logradouro: i.tipoLogradouro, tp_arquitetonico: i.tpArquitetonico, destinacao: i.destinacao, bice: i.bice,
+  contribuinte_nome: i.contribuinteNome, contribuinte_email: i.contribuinteEmail, contribuinte_telefone: i.contribuinteTelefone,
+  titular_tipo: i.titularTipo, titular_doc_tipo: i.titularDocTipo, titular_dt_aquisicao: i.titularDtAquisicao, titular_perc: i.titularPerc,
+  matricula_cartorio: i.matriculaCartorio, cartorio: i.cartorio, cnm_ri: i.cnmRi, cns_ri: i.cnsRi,
+  area_terreno_m2: i.areaTerreno, area_construida_m2: i.areaConstruida, testada_m: i.testada, n_pavimentos: i.nPavimentos,
+  padrao_construtivo: i.padraoConstrutivo, ano_construcao: i.anoConstrucao, observacoes: i.observacoes,
 });
 
-function formImovel(im, depois) {
+/** LGPD: CPF/CNPJ completo só com finalidade (o acesso fica registrado). */
+async function revelarDoc(imovelId) {
+  const fin = await G.confirmar('Ver CPF/CNPJ completo', 'O acesso a dado pessoal fica registrado (LGPD), com seu nome, horário e finalidade.', { campo: 'Finalidade', rotulo: 'Ver', placeholder: 'ex.: atendimento ao contribuinte, correção cadastral' });
+  if (!fin) return null;
+  try { return (await G.post(`/api/cib/imoveis/${imovelId}/revelar`, { finalidade: fin })).contribuinteDoc; } catch (e) { G.falha(e); return null; }
+}
+
+async function formImovel(im, depois) {
+  const D = await dominios();
   const m = G.modal({
-    titulo: im ? `Editar imóvel ${esc(im.inscricao)}` : 'Novo imóvel', largo: true, corpo: camposForm(paraForm(im)),
-    rodape: `<span class="dim small">${im && (im.transmitido || im.cib) ? 'Este imóvel já está no Sinter: a alteração entra na fila de transmissão.' : 'Campos com * são exigidos pelo Sinter.'}</span>
+    titulo: im ? `Editar imóvel ${esc(im.inscricao)}` : 'Novo imóvel', largo: true, corpo: camposForm(paraForm(im), D),
+    rodape: `<span class="dim small">${im && (im.transmitido || im.cib) ? 'Imóvel já está no Sinter: a alteração entra na fila de transmissão.' : 'Campos com * são exigidos pelo leiaute do Sinter (Manual Operacional 1.17).'}</span>
       <div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s">Salvar</button></div>`,
   });
   m.$('[data-a=c]').onclick = m.fechar;
+  const rev = m.$('#bt-rev');
+  if (rev) rev.onclick = async () => { const d = await revelarDoc(im.id); if (d) m.$('[name=contribuinte_doc]').value = d; };
   m.$('[data-a=s]').onclick = async () => {
     try {
       const body = lerForm(m.el);
+      if (!body.contribuinte_doc) delete body.contribuinte_doc; // vazio = mantém o atual
       const r = im ? await G.put('/api/cib/imoveis/' + im.id, body) : await G.post('/api/cib/imoveis', body);
       G.toast(r.movimentacaoId ? 'Imóvel atualizado — alteração registrada para transmissão ao Sinter.' : 'Imóvel salvo.');
       m.fechar(); depois && depois(); if (im) fichaImovel(im.id, depois);
@@ -224,112 +264,175 @@ function formImovel(im, depois) {
 }
 
 async function fichaImovel(id, depois) {
-  let im;
-  try { im = await G.api('/api/cib/imoveis/' + id); } catch (e) { return G.falha(e); }
+  let im, D;
+  try { [im, D] = await Promise.all([G.api('/api/cib/imoveis/' + id), dominios()]); } catch (e) { return G.falha(e); }
+  const cod = (tab, v) => (v != null && tab?.[String(v)] ? `${String(v).padStart(2, '0')} · ${esc(tab[String(v)])}` : '<span class="dim">—</span>');
   const linhas = [
-    ['Inscrição', `<strong class="mono">${esc(im.inscricao)}</strong>`], ['CIB', im.cib ? `<strong class="mono">${esc(im.cib)}</strong> <span class="dim small">desde ${G.data(im.cibAtribuidoEm)}</span>` : '<span class="dim">não atribuído</span>'],
+    ['Inscrição', `<strong class="mono">${esc(im.inscricao)}</strong>`],
+    ['CIB', im.cib ? `<strong class="mono">${esc(im.cib)}</strong> <span class="dim small">desde ${G.data(im.cibAtribuidoEm)}</span>${im.cibSimulado ? ' <span class="pill p-pendente">simulado · demonstração</span>' : ''}` : '<span class="dim">não atribuído</span>'],
     ['Status Sinter', G.pill(im.sinterStatus)], ['Situação', im.situacao === 'baixado' ? `${G.pill('baixado')} ${G.data(im.dataBaixa)} · ${esc(im.motivoBaixa)}` : G.pill('valido', 'ativo')],
-    ['Endereço', esc([im.logradouro, im.numero, im.complemento].filter(Boolean).join(', ') || '—') + `<div class="dim small">${esc(im.bairro)} ${im.cep ? '· CEP ' + esc(im.cep) : ''}</div>`],
+    ['Tipo (Sinter)', `${esc(im.tipo)} · tp. arquitetônico ${cod(D.tipoArquitetonico, im.tpArquitetonico)} · destinação ${cod(D.destinacao, im.destinacao)}${im.tipo === 'especial' ? ' · BICE ' + cod(D.bice, im.bice) : ''}`],
+    ['Endereço', `${cod(D.tipoLogradouro, im.tipoLogradouro)} — ${esc([im.logradouro, im.numero, im.complemento].filter(Boolean).join(', ') || '—')}<div class="dim small">${esc(im.bairro)} ${im.cep ? '· CEP ' + esc(im.cep) : ''}</div>`],
     ['Setor/Quadra/Lote', esc([im.setor, im.quadra, im.loteNum].map((x) => x || '—').join(' / '))],
-    ['Lote do CTM', im.loteId ? `<span class="mono">${esc(im.loteCodigo || im.loteId)}</span> · área geométrica ${G.m2(im.loteArea)} ${im.centroide ? `· <a href="/territorio" class="small">ver no mapa</a>` : ''}` : '<span class="dim">sem vínculo</span>'],
-    ['Contribuinte', `${esc(im.contribuinteNome || '—')} <span class="mono dim">${esc(im.contribuinteDoc || '')}</span>`],
-    ['Matrícula', `${esc(im.matriculaCartorio || '—')} ${im.cartorio ? '· ' + esc(im.cartorio) : ''}`],
-    ['Áreas', `Terreno ${G.m2(im.areaTerreno)} · Construída ${G.m2(im.areaConstruida)} · ${im.nPavimentos || '—'} pav.`],
-    ['Tipo / Uso / Padrão', `${esc(im.tipo)} · ${esc(im.uso || '—')} · ${esc(im.padraoConstrutivo || '—')}`],
-    ['Valor venal (PGV)', im.valorVenal != null ? `<strong>${G.brl(im.valorVenal)}</strong> <span class="dim small">terreno ${G.brl(im.valorVenalTerreno)} + construção ${G.brl(im.valorVenalConstrucao)}</span>` : '<span class="dim">PGV não cadastrada</span>'],
+    ['Lote do CTM', im.loteId ? `<span class="mono">${esc(im.loteCodigo || im.loteId)}</span> · área geométrica ${G.m2(im.loteArea)}` : '<span class="dim">sem vínculo</span>'],
+    ['Contribuinte', `${esc(im.contribuinteNome || '—')} <span class="mono dim" id="f-doc">${esc(im.contribuinteDocMascarado || '')}</span> ${im.contribuinteDocMascarado ? '<button class="b sm" id="f-rev">ver completo</button>' : ''}`],
+    ['Titularidade', `${cod(D.tipoTitularidade, im.titularTipo)} · ${cod(D.docTitularidade, im.titularDocTipo)} · aquisição ${G.data(im.titularDtAquisicao)}`],
+    ['Registro', `CNM ${esc(im.cnmRi || '—')} · matrícula ${esc(im.matriculaCartorio || '—')} ${im.cartorio ? '· ' + esc(im.cartorio) : ''}`],
+    ['Áreas', `Terreno ${G.m2(im.areaTerreno)} · Construída ${G.m2(im.areaConstruida)} · ${im.nPavimentos || '—'} pav. · padrão ${esc(im.padraoConstrutivo || '—')}`],
+    ['Valor venal (PGV)', im.valorVenal != null ? `<strong>${G.brl(im.valorVenal)}</strong> <span class="dim small">exercício ${im.valorVenalAno || '—'} · terreno ${G.brl(im.valorVenalTerreno)} + construção ${G.brl(im.valorVenalConstrucao)}</span>` : '<span class="dim">PGV sem exercício vigente</span>'],
   ];
   const DOCS = [['certidao_cadastral', 'Certidão cadastral'], ['declaracao_cib', 'Declaração CIB'], ['certidao_numeracao', 'Numeração predial'], ['certidao_valor_venal', 'Valor venal'], ['declaracao_situacao', 'Situação cadastral'], ['certidao_baixa', 'Certidão de baixa'], ['notificacao_atualizacao', 'Notificação']];
   const m = G.modal({
     titulo: `Imóvel <span class="mono">${esc(im.inscricao)}</span>`, largo: true,
     corpo: `<div class="subtabs"><button class="on" data-st="dados">Dados</button><button data-st="pend">Pendências (${im.pendencias.length})</button><button data-st="hist">Histórico Sinter (${im.movimentacoes.length})</button><button data-st="docs">Documentos (${im.documentos.length})</button></div>
-      <div data-sv="dados"><table class="t">${linhas.map(([k, val]) => `<tr><th style="width:190px">${k}</th><td>${val}</td></tr>`).join('')}</table>
-        ${im.divergencias.filter((d) => d.status === 'aberta').length ? `<div class="box" style="margin-top:12px;border-color:#e8742c"><h3>Divergência em aberto</h3>${im.divergencias.filter((d) => d.status === 'aberta').map((d) => `<div class="small">${esc(G.ROTULO_CAMPO[d.campo] || d.campo)}: município <strong>${esc(d.valor_municipio)}</strong> × ${esc(d.fonte)} <strong>${esc(d.valor_externo)}</strong> — ${esc(d.mensagem)}</div>`).join('')}</div>` : ''}</div>
-      <div data-sv="pend" hidden>${im.pendencias.map((p) => `<div class="pend ${p.nivel}"><b>${p.nivel === 'erro' ? 'BLOQUEIA' : 'ALERTA'}</b><span>${esc(p.mensagem)}</span></div>`).join('') || '<div class="vazio">Sem pendências — pronto para o Sinter.</div>'}</div>
-      <div data-sv="hist" hidden>${im.movimentacoes.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Status</th><th>Remessa</th><th>Detalhe</th></tr></thead><tbody>${im.movimentacoes.map((x) => `<tr><td class="small">${G.dataHora(x.criadoEm)}</td><td>${G.pill(x.tipo)}</td><td class="small">${esc(G.ROT[x.origem] || x.origem)}${x.documentoRef ? `<div class="dim">${esc(x.documentoRef)}</div>` : ''}</td><td>${G.pill(x.status)}</td><td class="mono">${x.remessaNumero ? String(x.remessaNumero).padStart(2, '0') : '—'}</td><td class="small">${esc(x.descricao)}${difs(x)}${x.retornoMsg ? `<div class="dim">Sinter: ${esc(x.retornoMsg)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vazio">Ainda não foi ao Sinter.</div>'}</div>
-      <div data-sv="docs" hidden><div class="g-actions" style="margin-bottom:10px">${DOCS.map(([t, l]) => `<button class="b sm" data-doc="${t}">＋ ${l}</button>`).join('')}</div>
+      <div data-sv="dados"><table class="t">${linhas.map(([k, val]) => `<tr><th style="width:170px">${k}</th><td>${val}</td></tr>`).join('')}</table>
+        ${im.divergencias.filter((d) => d.status === 'aberta').length ? `<div class="box" style="margin-top:12px;border-color:#e8742c"><h3>Divergência em aberto</h3>${im.divergencias.filter((d) => d.status === 'aberta').map((d) => `<div class="small">${esc(G.ROTULO_CAMPO[d.campo] || d.campo)}: ${d.valor_externo ? `município <strong>${esc(d.valor_municipio)}</strong> × ${esc(d.fonte)} <strong>${esc(d.valor_externo)}</strong> — ` : ''}${esc(d.mensagem)}</div>`).join('')}</div>` : ''}</div>
+      <div data-sv="pend" hidden>${im.pendencias.map((p) => `<div class="pend ${p.nivel}"><b>${p.nivel === 'erro' ? 'BLOQUEIA' : 'ALERTA'}</b><span>${esc(p.mensagem)}${p.falhaSinter ? ` <span class="dim mono small">· falha ${esc(p.falhaSinter)}</span>` : ''}</span></div>`).join('') || '<div class="vazio">Sem pendências — pronto para o Sinter.</div>'}</div>
+      <div data-sv="hist" hidden>${im.movimentacoes.length ? `<div class="tbl-wrap"><table class="t"><thead><tr><th>Data</th><th>Tipo</th><th>Origem</th><th>Status</th><th>Remessa</th><th>Detalhe</th></tr></thead><tbody>${im.movimentacoes.map((x) => `<tr><td class="small">${G.dataHora(x.criadoEm)}</td><td>${G.pill(x.tipo)}</td><td class="small">${esc(G.ROT[x.origem] || x.origem)}${x.documentoRef ? `<div class="dim">${esc(x.documentoRef)}</div>` : ''}</td><td>${G.pill(x.status)}</td><td class="mono">${x.remessaNumero ? String(x.remessaNumero).padStart(2, '0') : '—'}</td><td class="small">${esc(x.descricao)}${difs(x)}${falhasHtml(x.falhasSinter)}${x.retornoMsg ? `<div class="dim">Sinter: ${esc(x.retornoMsg)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vazio">Ainda não foi ao Sinter.</div>'}</div>
+      <div data-sv="docs" hidden><div class="g-actions w" style="margin-bottom:10px">${DOCS.map(([t, l]) => `<button class="b sm" data-doc="${t}">＋ ${l}</button>`).join('')}</div>
         ${im.documentos.length ? `<table class="t">${im.documentos.map((d) => `<tr><td>${esc(d.titulo)}</td><td class="mono">${esc(d.numero)}</td><td class="small">${G.data(d.emitido_em)}</td><td>${G.pill(d.status)}</td><td><a class="b sm" href="/documentos/ver.html?id=${d.id}" target="_blank">abrir</a></td></tr>`).join('')}</table>` : '<div class="vazio">Nenhum documento emitido.</div>'}</div>`,
-    rodape: `<div class="g-actions">${im.situacao === 'ativo' ? '<button class="b danger" data-a="baixa">Baixar inscrição</button>' : '<button class="b ok" data-a="reat">Reativar</button>'}<button class="b" data-a="cib">Informar CIB</button></div>
-      <div class="g-actions"><a class="b" href="/bci/ficha.html?inscricao=${encodeURIComponent(im.inscricao)}&municipio=${encodeURIComponent(im.municipio)}">BCI de campo</a><button class="b pri" data-a="edit">Editar dados</button></div>`,
+    rodape: `<div class="g-actions w">${im.situacao === 'ativo' ? '<button class="b danger" data-a="baixa">Baixar inscrição</button>' : '<button class="b ok" data-a="reat">Reativar</button>'}<button class="b" data-a="cib">Informar CIB</button>${im.cib ? '<button class="b" data-a="conf">Conferir no Sinter</button>' : ''}</div>
+      <div class="g-actions"><a class="b w" href="/bci/ficha.html?inscricao=${encodeURIComponent(im.inscricao)}&municipio=${encodeURIComponent(im.municipio)}">BCI de campo</a><button class="b pri" data-a="edit">Editar dados</button></div>`,
   });
   m.$$('.subtabs button').forEach((b) => (b.onclick = () => {
     m.$$('.subtabs button').forEach((x) => x.classList.toggle('on', x === b));
     m.$$('[data-sv]').forEach((s) => (s.hidden = s.dataset.sv !== b.dataset.st));
   }));
+  const fr = m.$('#f-rev');
+  if (fr) fr.onclick = async () => { const d = await revelarDoc(im.id); if (d) { m.$('#f-doc').textContent = d; fr.remove(); } };
   m.$$('[data-doc]').forEach((b) => (b.onclick = () => emitirDoc(b.dataset.doc, { imovelId: im.id, campos: b.dataset.doc === 'notificacao_atualizacao' ? { prazoDias: 30, motivo: 'Atualização dos dados cadastrais do imóvel.' } : {} })));
   m.$('[data-a=edit]').onclick = () => { m.fechar(); formImovel(im, depois); };
   m.$('[data-a=cib]').onclick = async () => {
-    const v = await G.confirmar('Informar CIB', 'Use quando o CIB foi consultado diretamente no portal do Sinter. Normalmente ele chega pelo retorno da remessa.', { campo: 'Código CIB', rotulo: 'Salvar' });
+    const v = await G.confirmar('Informar CIB', 'Use quando o CIB foi consultado diretamente no Sinter. Normalmente ele chega pelo retorno da remessa.', { campo: 'Código CIB', rotulo: 'Salvar' });
     if (v == null) return;
     try { await G.patch(`/api/cib/imoveis/${im.id}/cib`, { cib: v.trim() }); G.toast('CIB registrado.'); m.fechar(); fichaImovel(im.id, depois); depois && depois(); } catch (e) { G.falha(e); }
   };
+  const conf = m.$('[data-a=conf]');
+  if (conf) conf.onclick = async () => { try { const r = await G.post(`/api/cib/imoveis/${im.id}/conferir-sinter`); G.toast(`Conferência no Sinter: ${r.divergencias} divergência(s) · situação do CIB: ${r.situacaoCib || '—'}`); m.fechar(); fichaImovel(im.id, depois); } catch (e) { G.falha(e); } };
   const b = m.$('[data-a=baixa]');
-  if (b) b.onclick = async () => {
-    const motivo = await G.confirmar('Baixar inscrição', `A baixa de <strong>${esc(im.inscricao)}</strong> será registrada e transmitida ao Sinter.`, { campo: 'Motivo (ex.: demolição, unificação de lotes)', rotulo: 'Baixar' });
-    if (!motivo) return;
-    try { await G.post(`/api/cib/imoveis/${im.id}/baixa`, { motivo }); G.toast('Baixa registrada.'); m.fechar(); fichaImovel(im.id, depois); depois && depois(); } catch (e) { G.falha(e); }
-  };
+  if (b) b.onclick = () => baixarImovel(im, D, () => { m.fechar(); fichaImovel(im.id, depois); depois && depois(); });
   const r = m.$('[data-a=reat]');
   if (r) r.onclick = async () => {
-    const motivo = await G.confirmar('Reativar inscrição', `Reativar <strong>${esc(im.inscricao)}</strong>?`, { campo: 'Motivo', rotulo: 'Reativar' });
+    const motivo = await G.confirmar('Reativar inscrição', `Reativar <strong>${esc(im.inscricao)}</strong> no cadastro municipal? A API do Sinter (manual 1.17) não tem operação de reativação: se o imóvel tinha CIB, será aberta uma divergência para tratar com o suporte do Sinter.`, { campo: 'Motivo', rotulo: 'Reativar' });
     if (motivo == null) return;
     try { await G.post(`/api/cib/imoveis/${im.id}/reativar`, { motivo }); G.toast('Inscrição reativada.'); m.fechar(); fichaImovel(im.id, depois); depois && depois(); } catch (e) { G.falha(e); }
   };
 }
+
+/** Baixa com motivo e tipo de desativação da tabela oficial do Sinter. */
+function baixarImovel(im, D, depois) {
+  const ops = Object.entries(D.motivoDesativacao).map(([k, v]) => `<option value="${k}" data-tipos="${v.tipos.join(',')}">${k.padStart(2, '0')} · ${esc(v.descricao)}</option>`).join('');
+  const m = G.modal({
+    titulo: `Baixar inscrição ${esc(im.inscricao)}`,
+    corpo: `<p class="small" style="margin-top:0">A baixa vale no cadastro e vai ao Sinter como <strong>desativação</strong> da UI${im.cib ? ` (CIB ${esc(im.cib)})` : ' — este imóvel ainda não tem CIB, então só o cadastro municipal é atualizado'}.</p>
+      <div class="f"><label>Motivo (tabela do Sinter)<select id="b-mot">${ops}</select></label><label>Tipo de desativação<select id="b-tipo"></select></label>
+      <label class="full">Ato / documento<input id="b-ref" placeholder="Decreto, processo, alvará de demolição…" /></label><label class="full">Complemento (até 300)<textarea id="b-obs"></textarea></label></div>`,
+    rodape: `<span></span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b danger" data-a="s">Baixar</button></div>`,
+  });
+  const tipos = () => {
+    const t = m.$('#b-mot').selectedOptions[0].dataset.tipos.split(',');
+    m.$('#b-tipo').innerHTML = t.map((x) => `<option value="${x}">${x.padStart(2, '0')} · ${esc(D.tipoDesativacao[x])}</option>`).join('');
+  };
+  m.$('#b-mot').onchange = tipos; tipos();
+  m.$('[data-a=c]').onclick = m.fechar;
+  m.$('[data-a=s]').onclick = async () => {
+    try {
+      await G.post(`/api/cib/imoveis/${im.id}/baixa`, { desativacaoMotivo: Number(m.$('#b-mot').value), desativacaoTipo: Number(m.$('#b-tipo').value), documentoRef: m.$('#b-ref').value, motivo: m.$('#b-obs').value || m.$('#b-mot').selectedOptions[0].textContent.slice(5) });
+      G.toast('Baixa registrada.'); m.fechar(); depois && depois();
+    } catch (e) { G.falha(e); }
+  };
+}
+function falhasHtml(lista) {
+  if (!lista || !lista.length) return '';
+  return lista.map((f) => `<div class="pend erro"><b>${esc(f.codigo)}</b><span>${esc(f.mensagem || f.descricao || '')}${f.campos?.length ? ` <span class="dim mono">(${esc(f.campos.join(', '))})</span>` : ''}</span></div>`).join('');
+}
+
 function difs(x) {
   const ks = Object.keys(x.dadosDepois || {});
   if (!ks.length) return '';
   return `<div class="dim">${ks.slice(0, 4).map((k) => `${esc(G.ROTULO_CAMPO[k] || k)}: ${x.dadosAntes?.[k] != null && x.dadosAntes[k] !== '' ? esc(x.dadosAntes[k]) + ' → ' : ''}<strong>${esc(x.dadosDepois[k])}</strong>`).join(' · ')}${ks.length > 4 ? ' …' : ''}</div>`;
 }
 
-// Importacao da base cadastral (CSV exportado do sistema tributario).
-const ALIASES = {
-  inscricao: ['inscricao', 'inscricao_imobiliaria', 'insc', 'inscricao_municipal', 'cod_imovel', 'codigo_imovel'],
-  lote_codigo: ['lote_codigo', 'codigo_lote', 'cod_lote', 'id_lote'],
-  tipo: ['tipo', 'tipo_imovel'], uso: ['uso', 'uso_imovel', 'utilizacao'],
-  logradouro: ['logradouro', 'endereco', 'rua', 'nome_logradouro'], numero: ['numero', 'num', 'n', 'numero_predial'],
-  complemento: ['complemento', 'compl'], bairro: ['bairro'], cep: ['cep'], setor: ['setor'], quadra: ['quadra'], lote_num: ['lote', 'lote_num'],
-  contribuinte_nome: ['contribuinte', 'contribuinte_nome', 'proprietario', 'nome_contribuinte', 'nome'],
-  contribuinte_doc: ['cpf', 'cnpj', 'cpf_cnpj', 'documento', 'contribuinte_doc', 'cpf_cnpj_contribuinte'],
-  matricula_cartorio: ['matricula', 'matricula_cartorio'], cartorio: ['cartorio'],
-  area_terreno_m2: ['area_terreno', 'area_terreno_m2', 'at', 'area_lote'], area_construida_m2: ['area_construida', 'area_construida_m2', 'ac', 'area_edificada'],
-  testada_m: ['testada', 'testada_m'], n_pavimentos: ['pavimentos', 'n_pavimentos'], padrao_construtivo: ['padrao', 'padrao_construtivo'], ano_construcao: ['ano_construcao', 'ano'],
-};
+// Importação incremental da base do sistema tributário (as colunas são reconhecidas no servidor).
+async function sha256Hex(buf) {
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 function importarBase(depois) {
   const m = G.modal({
-    titulo: 'Importar base cadastral', largo: true,
-    corpo: `<p class="small dim" style="margin-top:0">Envie o CSV exportado do sistema tributário (separador ; , ou tab). As colunas são reconhecidas pelo nome
-      (inscrição, logradouro, número, bairro, contribuinte, CPF/CNPJ, área do terreno, área construída…). Imóveis existentes são atualizados pela inscrição;
-      o vínculo com o lote do CTM é feito pelo código do lote (ou pela própria inscrição). A validação Sinter roda em seguida.</p>
-      <input type="file" id="arq" accept=".csv,.txt,.tsv" /><div id="prev" style="margin-top:12px"></div>`,
+    titulo: 'Importar base do sistema tributário', largo: true,
+    corpo: `<p class="small dim" style="margin-top:0">Envie o CSV exportado do sistema tributário (; , ou tab). A importação é <strong>incremental e idempotente</strong>:
+      cada inscrição é comparada campo a campo; só o que mudou é aplicado (e vira alteração para o Sinter quando o imóvel já está lá).
+      Importar o mesmo arquivo de novo não muda nada. Colunas ausentes não são tocadas.</p>
+      <input type="file" id="arq" accept=".csv,.txt,.tsv" />
+      <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="compl" /> Carga completa (lista as inscrições ativas que não vieram no arquivo — nunca baixa automaticamente)</label>
+      <div id="prev" style="margin-top:12px"></div>`,
     rodape: `<span class="dim small" id="st"></span><div class="g-actions"><button class="b" data-a="c">Fechar</button><button class="b pri" data-a="s" disabled>Importar</button></div>`,
   });
-  let itens = [];
+  let dados = null;
   m.$('[data-a=c]').onclick = m.fechar;
   m.$('#arq').onchange = async (e) => {
     const f = e.target.files[0]; if (!f) return;
-    let txt = await f.text();
-    if (txt.includes('�')) txt = new TextDecoder('windows-1252').decode(await f.arrayBuffer());
+    const buf = await f.arrayBuffer();
+    let txt = new TextDecoder('utf-8').decode(buf);
+    if (txt.includes('�')) txt = new TextDecoder('windows-1252').decode(buf);
     const { cab, linhas } = G.parseCsv(txt);
-    const mapa = cab.map((h) => { const n = G.norm(h); return Object.keys(ALIASES).find((k) => ALIASES[k].includes(n)) || null; });
-    itens = linhas.map((l) => Object.fromEntries(mapa.map((k, i) => [k, l[i]]).filter(([k]) => k)));
-    m.$('#prev').innerHTML = `<div class="small" style="margin-bottom:6px"><strong>${itens.length}</strong> linhas · colunas reconhecidas:
-      ${cab.map((h, i) => mapa[i] ? `<span class="pill p-conciliado">${esc(h)} → ${esc(G.ROTULO_CAMPO[mapa[i]] || mapa[i])}</span>` : `<span class="pill p-baixa">${esc(h)} (ignorada)</span>`).join(' ')}</div>
-      ${mapa.includes('inscricao') ? '' : '<div class="pend erro"><b>ERRO</b><span>Nenhuma coluna de inscrição encontrada.</span></div>'}`;
-    m.$('[data-a=s]').disabled = !mapa.includes('inscricao') || !itens.length;
+    dados = { cab, linhas, nome: f.name, hash: await sha256Hex(buf) };
+    m.$('#prev').innerHTML = `<div class="small"><strong>${linhas.length}</strong> linhas · ${cab.length} colunas: ${cab.map((h) => `<span class="pill p-pronto">${esc(h)}</span>`).join(' ')}
+      <div class="dim" style="margin-top:6px">SHA-256 ${dados.hash.slice(0, 16)}… — a correspondência das colunas é feita no servidor (inscrição, logradouro, CPF/CNPJ, áreas, CNM, tipo arquitetônico…).</div></div>`;
+    m.$('[data-a=s]').disabled = !linhas.length;
   };
   m.$('[data-a=s]').onclick = async () => {
     m.$('[data-a=s]').disabled = true;
-    let ins = 0, at = 0, ig = 0;
     try {
-      for (let i = 0; i < itens.length; i += 1000) {
-        m.$('#st').textContent = `Enviando ${i + 1}–${Math.min(i + 1000, itens.length)} de ${itens.length}…`;
-        const r = await G.post('/api/cib/imoveis/importar', { itens: itens.slice(i, i + 1000) });
-        ins += r.inseridos; at += r.atualizados; ig += r.ignorados;
+      let ini = await G.post('/api/cib/importacoes', { arquivoNome: dados.nome, arquivoSha256: dados.hash, completa: m.$('#compl').checked, colunas: dados.cab });
+      if (ini.repetida) {
+        const ok = await G.confirmar('Arquivo já importado', `Este arquivo é idêntico ao da importação #${ini.anterior.id} (${G.dataHora(ini.anterior.created_at)}). Reprocessar mesmo assim? (Nada deve mudar.)`, { rotulo: 'Reprocessar' });
+        if (!ok) { m.$('#st').textContent = 'Nada a fazer.'; return; }
+        ini = await G.post('/api/cib/importacoes', { arquivoNome: dados.nome, arquivoSha256: dados.hash, completa: m.$('#compl').checked, colunas: dados.cab, forcar: true });
       }
-      m.$('#st').textContent = `Concluído: ${ins} inseridos, ${at} atualizados, ${ig} ignorados.`;
-      G.toast('Base importada e validada.'); depois && depois();
+      const id = ini.importacao.id;
+      for (let i = 0; i < dados.linhas.length; i += 1000) {
+        m.$('#st').textContent = `Processando ${i + 1}–${Math.min(i + 1000, dados.linhas.length)} de ${dados.linhas.length}…`;
+        await G.post(`/api/cib/importacoes/${id}/lote`, { cabecalho: dados.cab, linhas: dados.linhas.slice(i, i + 1000) });
+      }
+      await G.post(`/api/cib/importacoes/${id}/finalizar`);
+      m.fechar(); depois && depois();
+      relatorioImportacao(id);
     } catch (e) { G.falha(e); m.$('[data-a=s]').disabled = false; }
   };
+}
+async function relatorioImportacao(id) {
+  const r = await G.get(`/api/cib/importacoes/${id}`);
+  const t = r.totais || {};
+  const m = G.modal({
+    titulo: `Importação #${r.id} · ${esc(r.arquivo_nome || '')}`, largo: true,
+    corpo: `<div class="cards" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+      <div class="kpi verde"><div class="l">novos</div><div class="v">${t.novo || 0}</div></div><div class="kpi amarelo"><div class="l">alterados</div><div class="v">${t.alterado || 0}</div></div>
+      <div class="kpi"><div class="l">inalterados</div><div class="v">${t.inalterado || 0}</div></div><div class="kpi"><div class="l">erros</div><div class="v">${t.erro || 0}</div></div>
+      <div class="kpi escuro"><div class="l">ausentes</div><div class="v">${r.completa ? (t.ausente || 0) : '—'}</div></div></div>
+      <div class="toolbar2"><select id="fa"><option value="">mudanças (exceto inalterados)</option><option value="novo">novos</option><option value="alterado">alterados</option><option value="erro">erros</option><option value="ausente">ausentes</option><option value="inalterado">inalterados</option></select>
+        <a class="b sm" href="#" id="csv">Baixar relatório CSV</a></div>
+      <div class="tbl-wrap" style="max-height:50vh;overflow:auto"><table class="t"><thead><tr><th>Inscrição</th><th>Ação</th><th>O que mudou (antes → depois)</th><th>Observação</th></tr></thead><tbody id="tb"></tbody></table></div>`,
+  });
+  const pintar = (itens) => {
+    m.$('#tb').innerHTML = itens.filter((i) => m.$('#fa').value || i.acao !== 'inalterado').map((i) => `<tr><td class="mono">${esc(i.inscricao)}</td><td>${G.pill({ novo: 'inclusao', alterado: 'alteracao', erro: 'rejeitada', ausente: 'baixa', inalterado: 'descartada' }[i.acao], i.acao)}</td>
+      <td class="small">${Object.entries(i.campos || {}).map(([k, v]) => `${esc(r.rotulos[k] || k)}: ${v.antes != null && v.antes !== '' ? esc(v.antes) + ' → ' : ''}<strong>${esc(v.depois ?? '')}</strong>`).join('<br>') || '—'}</td><td class="small">${esc(i.mensagem)}</td></tr>`).join('') || '<tr><td colspan="4" class="vazio">Nada nesta categoria.</td></tr>';
+  };
+  pintar(r.itens);
+  m.$('#fa').onchange = async () => { const x = await G.get(`/api/cib/importacoes/${id}?acao=${m.$('#fa').value}`); pintar(x.itens); };
+  m.$('#csv').onclick = (e) => { e.preventDefault(); G.baixar(G.m(`/api/cib/importacoes/${id}/relatorio.csv`), `importacao-${id}.csv`).catch(G.falha); };
+}
+async function historicoImportacoes() {
+  const lista = await G.get('/api/cib/importacoes');
+  const m = G.modal({
+    titulo: 'Importações do sistema tributário', largo: true,
+    corpo: `<p class="small dim" style="margin-top:0">Também pode rodar agendada: <span class="mono">npm run importar-base -- --arquivo base.csv</span> (mesmo motor, idempotente).</p>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>#</th><th>Arquivo</th><th>Quando</th><th>Origem</th><th class="num">Novos</th><th class="num">Alterados</th><th class="num">Inalterados</th><th class="num">Erros</th><th></th></tr></thead><tbody>
+      ${lista.map((i) => `<tr><td class="mono">${i.id}</td><td>${esc(i.arquivo_nome)}<div class="dim small mono">${esc((i.arquivo_sha256 || '').slice(0, 12))}</div></td><td class="small">${G.dataHora(i.created_at)}<div class="dim">${esc(i.usuario_nome)}</div></td><td>${esc(i.origem)}${i.completa ? ' · completa' : ''}</td>
+        <td class="num">${i.totais?.novo ?? '—'}</td><td class="num">${i.totais?.alterado ?? '—'}</td><td class="num">${i.totais?.inalterado ?? '—'}</td><td class="num">${i.totais?.erro ?? '—'}</td><td><button class="b sm" data-r="${i.id}">relatório</button></td></tr>`).join('') || '<tr><td colspan="9" class="vazio">Nenhuma importação.</td></tr>'}</tbody></table></div>`,
+  });
+  m.$$('[data-r]').forEach((b) => (b.onclick = () => relatorioImportacao(Number(b.dataset.r))));
 }
 
 // ------------------------------------------------------------------ CICLO MENSAL
@@ -411,6 +514,7 @@ function registrarEvento(depois) {
       <label>Nº do documento de origem<input id="e-ref" placeholder="ITBI 2026/123, Habite-se 45/2026…" /></label>
       <label>Inscrição *<input id="e-insc" placeholder="ex.: 01.03.0127" autocomplete="off" /><div class="sug" id="e-sug" hidden></div></label>
       <label class="full" style="grid-column:span 2">Descrição<input id="e-desc" /></label>
+      <label id="e-mot-l" style="display:none">Motivo da baixa (Sinter)<select id="e-mot"></select></label>
       <div class="full"><div class="small dim" style="margin:6px 0">Campos alterados (para inclusão, informe todos os dados do imóvel)</div>${seletorCampos('ev')}</div></div>`,
     rodape: `<span class="dim small">O evento só altera o cadastro depois de validado.</span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b" data-a="s">Capturar</button><button class="b pri" data-a="sv">Capturar e validar</button></div>`,
   });
@@ -422,11 +526,13 @@ function registrarEvento(depois) {
     m.$('#ev-campos').innerHTML = ''; p.campos.forEach((k) => m.$('#ev-add').click() || (m.$$('#ev-campos .k')[m.$$('#ev-campos .k').length - 1].value = k));
   };
   m.$('#e-orig').onchange = preset; preset();
+  dominios().then((D) => { m.$('#e-mot').innerHTML = Object.entries(D.motivoDesativacao).map(([k, v]) => `<option value="${k}">${k.padStart(2, '0')} · ${esc(v.descricao)}</option>`).join(''); });
+  m.$('#e-tipo').addEventListener('change', () => { m.$('#e-mot-l').style.display = m.$('#e-tipo').value === 'baixa' ? '' : 'none'; });
   autocompletarInscricao(m.$('#e-insc'), m.$('#e-sug'));
   m.$('[data-a=c]').onclick = m.fechar;
   const enviar = async (validar) => {
     try {
-      const mov = await G.post('/api/cib/movimentacoes', { tipo: m.$('#e-tipo').value, origem: m.$('#e-orig').value, inscricao: m.$('#e-insc').value.trim(), documentoRef: m.$('#e-ref').value, descricao: m.$('#e-desc').value, dadosDepois: lerCampos() });
+      const mov = await G.post('/api/cib/movimentacoes', { tipo: m.$('#e-tipo').value, origem: m.$('#e-orig').value, inscricao: m.$('#e-insc').value.trim(), documentoRef: m.$('#e-ref').value, descricao: m.$('#e-desc').value, dadosDepois: lerCampos(), desativacaoMotivo: Number(m.$('#e-mot').value) || undefined });
       if (validar) {
         try { await G.post(`/api/cib/movimentacoes/${mov.id}/validar`); G.toast('Evento capturado, validado e aplicado no cadastro.'); }
         catch (e) { G.toast('Capturado, mas não validou: ' + ((e.data?.erros || []).map((x) => x.mensagem).join('; ') || e.message), true); }
@@ -504,87 +610,108 @@ window.autocompletarInscricao = autocompletarInscricao;
 
 // ------------------------------------------------------------------ REMESSAS
 async function remessas(v) {
-  const [lista, p, cfg] = await Promise.all([G.get('/api/cib/remessas'), G.get('/api/cib/painel'), G.get('/api/cib/config')]);
-  v.innerHTML = `${cabecalho('Transmitir', 'Remessas ao Sinter', 'Movimentações validadas viram uma remessa numerada. Envie por API ou em lote (arquivo para o portal), registre o protocolo e processe o retorno: cada item é conciliado, rejeitado ou vira divergência. O hash SHA-256 de cada arquivo fica na auditoria.',
-    `<button class="b" id="bt-carga">Carga inicial (implantação)</button><button class="b pri" id="bt-prep" ${p.filas.transmitir ? '' : 'disabled'}>Preparar remessa (${p.filas.transmitir})</button>`)}
-    <div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Competência</th><th>Status</th><th>Modo / protocolo</th><th class="num">Itens</th><th class="num">OK</th><th class="num">Diverg.</th><th class="num">Rejeit.</th><th>Enviada</th><th></th></tr></thead>
+  const [lista, p, st, rej] = await Promise.all([G.get('/api/cib/remessas'), G.get('/api/cib/painel'), G.get('/api/cib/sinter/status'), G.get('/api/cib/reprocessamento')]);
+  const api = st.api.configurado;
+  v.innerHTML = `${cabecalho('Transmitir', 'Remessas ao Sinter', `Leiaute oficial <strong>${esc(st.leiaute.rotulo)}</strong> (${G.data(st.leiaute.dataManual)}): um registro NDJSON por imóvel — inclusão (I), alteração (A) ou desativação (D). Cada registro é validado contra o leiaute antes de entrar no arquivo; o que falha volta para a fila com a falha apontada. O arquivo é congelado com SHA-256.`,
+    `<button class="b w" id="bt-carga">Carga inicial</button><button class="b pri w" id="bt-prep" ${p.filas.transmitir ? '' : 'disabled'}>Preparar remessa (${p.filas.transmitir})</button>`)}
+    <div class="toolbar2 small">${api ? `<span class="pill p-conciliado">API do Sinter configurada · ${esc(st.api.ambiente)}</span>` : '<span class="pill p-pendente">API do Sinter sem credenciais — envio em lote (arquivo .zip no portal/Swagger + idArquivo)</span>'}
+      ${st.codigoIbgeOk ? '' : '<span class="pill p-divergente">informe o código IBGE do município</span>'}${st.simulacao ? '<span class="pill p-pendente">simulação de retorno ligada (demonstração)</span>' : ''}</div>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>Nº</th><th>Competência</th><th>Status</th><th>Leiaute / idArquivo</th><th class="num">Registros</th><th class="num">Efetivados</th><th class="num">C/ falhas</th><th class="num">Rejeitados</th><th>Enviada</th><th></th></tr></thead>
     <tbody>${lista.map((r) => `<tr><td class="mono"><strong>${String(r.numero).padStart(2, '0')}</strong></td><td>${esc(r.competencia)}</td><td>${G.pill(r.status)}</td>
-      <td class="small">${esc(r.modo)}${r.protocolo ? `<div class="mono">${esc(r.protocolo)}</div>` : ''}</td><td class="num">${r.qtd_itens}</td><td class="num">${r.qtd_ok}</td><td class="num">${r.qtd_divergente}</td><td class="num">${r.qtd_erro}</td>
-      <td class="small">${G.dataHora(r.enviada_em)}</td>
-      <td style="white-space:nowrap"><button class="b sm" data-j="${r.id}" data-n="${r.numero}">JSON</button> <button class="b sm" data-c="${r.id}" data-n="${r.numero}">CSV</button> <button class="b sm" data-it="${r.id}">itens</button>
-        ${r.status === 'preparada' ? `<button class="b sm pri" data-env="${r.id}">Enviar</button>` : ''}
-        ${['enviada', 'parcial'].includes(r.status) ? `<button class="b sm" data-ret="${r.id}">Importar retorno</button>${cfg.simulacao ? ` <button class="b sm" data-sim="${r.id}" title="Somente demonstração">Simular retorno</button>` : ''}` : ''}</td></tr>`).join('') || '<tr><td colspan="10" class="vazio">Nenhuma remessa ainda. Faça a carga inicial e prepare a primeira.</td></tr>'}</tbody></table></div>
-    <div class="box" style="margin-top:16px"><h3>Como operamos</h3><p class="small" style="margin:0">O convênio Sinter permite até 3 transmissores pessoa jurídica por município. O município continua titular do convênio e responsável pelo cadastro; a rotina é operada,
-      documentada a cada envio e prestada em relatório mensal. ${cfg.transmissores ? `Transmissor(es): <strong>${esc(cfg.transmissores)}</strong>.` : ''} O layout do arquivo segue <span class="mono">BzR-Sinter/1.0</span> e é ajustável ao layout oficial do Manual Operacional.</p></div>`;
-  el('bt-prep').onclick = async () => { try { const r = await G.post('/api/cib/remessas'); G.toast(`Remessa ${r.numero} preparada com ${r.qtd_itens} itens.`); remessas(v); } catch (e) { G.falha(e); } };
+      <td class="small"><span class="mono">${esc(r.leiaute)}</span>${r.id_arquivo_sinter ? `<div class="mono">${esc(r.id_arquivo_sinter)}</div>` : ''}${r.qtd_excluidos ? `<div class="dim">${r.qtd_excluidos} fora por leiaute</div>` : ''}</td>
+      <td class="num">${r.qtd_itens}</td><td class="num">${r.qtd_ok}</td><td class="num">${r.qtd_divergente}</td><td class="num">${r.qtd_erro}</td><td class="small">${G.dataHora(r.enviada_em)}</td>
+      <td style="white-space:nowrap"><span class="w"><button class="b sm" data-dl="zip" data-id="${r.id}" data-n="${r.numero}" title="Arquivo oficial">ZIP</button> <button class="b sm" data-dl="ndjson" data-id="${r.id}" data-n="${r.numero}">NDJSON</button> <button class="b sm" data-dl="csv" data-id="${r.id}" data-n="${r.numero}" title="Planilha de conferência">CSV</button></span>
+        <button class="b sm" data-it="${r.id}">itens</button>${r.n_retornos ? ` <button class="b sm" data-hr="${r.id}">retornos (${r.n_retornos})</button>` : ''}
+        ${r.status === 'preparada' ? `<button class="b sm pri w" data-env="${r.id}">Enviar</button>` : ''}
+        ${['enviada', 'parcial'].includes(r.status) ? `<span class="w">${api && r.modo === 'api' ? `<button class="b sm" data-cons="${r.id}">Consultar retorno</button> ` : ''}<button class="b sm" data-ret="${r.id}">Importar retorno</button>${st.simulacao ? ` <button class="b sm" data-sim="${r.id}" title="Somente demonstração">Simular</button>` : ''}</span>` : ''}</td></tr>`).join('') || '<tr><td colspan="10" class="vazio">Nenhuma remessa ainda. Faça a carga inicial e prepare a primeira.</td></tr>'}</tbody></table></div>
+    <div class="box" style="margin-top:16px"><h3>Rejeitados pelo Sinter — fila de reprocessamento <span class="w">${rej.length ? '<button class="b sm" id="rp-sel">Reprocessar selecionados</button> <button class="b sm pri" id="rp-todos">Reprocessar todos</button>' : ''}</span></h3>
+      ${rej.length ? `<p class="small dim" style="margin-top:0">Corrija o cadastro conforme a falha e reprocesse: o estado atual do imóvel é revalidado e volta para a fila da próxima remessa (sem duplicar nada).</p>
+      <div class="tbl-wrap" style="max-height:360px;overflow:auto"><table class="t"><thead><tr><th></th><th>Inscrição</th><th>Tipo</th><th>Remessa</th><th>Tentativas</th><th>Falhas do Sinter</th></tr></thead><tbody>
+      ${rej.map((x) => `<tr><td><input type="checkbox" data-rp="${x.id}" /></td><td class="mono"><a href="#" data-im="${x.imovel_id || ''}">${esc(x.inscricao)}</a></td><td>${G.pill(x.tipo)}</td><td class="mono">${x.remessa_numero ? String(x.remessa_numero).padStart(2, '0') : '—'}</td><td class="num">${x.tentativas}</td>
+        <td>${falhasHtml(x.falhas.map((f) => ({ ...f, mensagem: f.descricao || f.mensagem })))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vazio">Nenhum rejeitado.</div>'}</div>
+    <div class="box"><h3>Como operamos</h3><p class="small" style="margin:0">O convênio Sinter permite até 3 transmissores pessoa jurídica por município; o município continua titular do convênio e responsável pelo cadastro.
+      Fluxo da API (Manual Operacional): token OAuth (client credentials) → POST do .zip com NDJSON → <span class="mono">idArquivo</span> → consulta do processamento (efetivados, rejeitados e códigos de falha) → retorno importado aqui. Importar o mesmo retorno duas vezes não altera nada.</p></div>`;
+  el('bt-prep').onclick = async () => {
+    try {
+      const r = await G.api('/api/cib/remessas', { method: 'POST', body: { municipio: G.municipio } }).catch((e) => e.data || Promise.reject(e));
+      if (r.remessa) G.toast(`Remessa ${r.remessa.numero} preparada: ${r.remessa.qtd_itens} registro(s)${r.excluidos.length ? ` · ${r.excluidos.length} fora por falha de leiaute (voltaram para o ciclo mensal)` : ''}.`);
+      else G.toast(`Nenhum registro válido: ${r.excluidos?.length || 0} voltaram para o ciclo mensal com a falha apontada.`, true);
+      if (r.excluidos?.length) mostrarExcluidos(r.excluidos);
+      remessas(v);
+    } catch (e) { G.falha(e); }
+  };
   el('bt-carga').onclick = async () => {
     if (!(await G.confirmar('Carga inicial', 'Coloca na fila de transmissão todo imóvel ativo, sem pendência bloqueante, que nunca foi ao Sinter.', { rotulo: 'Enfileirar' }))) return;
     try { const r = await G.post('/api/cib/movimentacoes/carga-inicial'); G.toast(`${r.enfileirados} imóveis enfileirados.`); remessas(v); } catch (e) { G.falha(e); }
   };
-  v.querySelectorAll('[data-j]').forEach((b) => (b.onclick = () => G.baixar(`/api/cib/remessas/${b.dataset.j}/arquivo`, `remessa-sinter-${b.dataset.n}.json`).catch(G.falha)));
-  v.querySelectorAll('[data-c]').forEach((b) => (b.onclick = () => G.baixar(`/api/cib/remessas/${b.dataset.c}/arquivo?formato=csv`, `remessa-sinter-${b.dataset.n}.csv`).catch(G.falha)));
+  v.querySelectorAll('[data-dl]').forEach((b) => (b.onclick = () => G.baixar(G.m(`/api/cib/remessas/${b.dataset.id}/arquivo?formato=${b.dataset.dl}`), `remessa-${String(b.dataset.n).padStart(3, '0')}.${b.dataset.dl === 'csv' ? 'conferencia.csv' : b.dataset.dl}`).catch(G.falha)));
   v.querySelectorAll('[data-it]').forEach((b) => (b.onclick = () => itensRemessa(Number(b.dataset.it)).catch(G.falha)));
-  v.querySelectorAll('[data-env]').forEach((b) => (b.onclick = async () => {
-    const m = G.modal({
-      titulo: 'Enviar remessa',
-      corpo: `<div class="f"><label>Modo<select id="md"><option value="lote">Em lote (arquivo enviado no portal do Sinter)</option><option value="api">Via API (requer SINTER_API_URL)</option></select></label>
-        <label>Protocolo do Sinter<input id="pr" placeholder="gerado automaticamente se vazio" /></label></div><p class="small dim">No envio em lote, baixe o arquivo (JSON/CSV), transmita no portal e informe o protocolo recebido.</p>`,
-      rodape: `<span></span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s">Marcar como enviada</button></div>`,
-    });
-    m.$('[data-a=c]').onclick = m.fechar;
-    m.$('[data-a=s]').onclick = async () => { try { await G.post(`/api/cib/remessas/${b.dataset.env}/enviar`, { modo: m.$('#md').value, protocolo: m.$('#pr').value }); G.toast('Remessa enviada.'); m.fechar(); remessas(v); } catch (e) { G.falha(e); } };
+  v.querySelectorAll('[data-hr]').forEach((b) => (b.onclick = async () => {
+    const h = await G.get(`/api/cib/remessas/${b.dataset.hr}/retornos`);
+    G.modal({ titulo: 'Retornos processados', corpo: `<table class="t">${h.map((x) => `<tr><td class="small">${G.dataHora(x.created_at)}</td><td>${esc(x.origem)}</td><td class="small">${x.resumo.efetivados ?? 0} efetivados · ${x.resumo.rejeitados ?? 0} rejeitados · ${x.resumo.ignorados ?? 0} já respondidos</td><td class="mono small">${esc(x.sha256.slice(0, 12))}…</td></tr>`).join('')}</table>` });
   }));
-  v.querySelectorAll('[data-sim]').forEach((b) => (b.onclick = async () => { try { const r = await G.post(`/api/cib/remessas/${b.dataset.sim}/simular-retorno`); G.toast(`Retorno (simulado): ${r.ok} ok, ${r.divergentes} divergentes, ${r.rejeitadas} rejeitadas.`); remessas(v); } catch (e) { G.falha(e); } }));
-  v.querySelectorAll('[data-ret]').forEach((b) => (b.onclick = () => importarRetorno(Number(b.dataset.ret), () => remessas(v))));
+  v.querySelectorAll('[data-im]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); if (a.dataset.im) fichaImovel(Number(a.dataset.im)); }));
+  v.querySelectorAll('[data-env]').forEach((b) => (b.onclick = () => {
+    const m = G.modal({
+      titulo: 'Enviar remessa ao Sinter',
+      corpo: `<div class="f"><label class="full">Como enviar<select id="md">${api ? '<option value="api">Via API do Sinter (automático)</option>' : ''}<option value="lote">Em lote: baixar o .zip e enviar no portal/Swagger do Sinter</option></select></label>
+        <label class="full" id="l-id">idArquivo devolvido pelo Sinter<input id="ida" placeholder="ex.: 2507507_1763401799631" /></label></div>
+        <p class="small dim">No envio em lote, baixe o ZIP (arquivo oficial), envie em <span class="mono">POST /api/v1/arquivos/{codigoIbge}</span> e informe o <span class="mono">idArquivo</span> da resposta.</p>`,
+      rodape: `<button class="b" id="zip">Baixar ZIP</button><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s">Enviar</button></div>`,
+    });
+    const tog = () => { m.$('#l-id').style.display = m.$('#md').value === 'lote' ? '' : 'none'; };
+    m.$('#md').onchange = tog; tog();
+    m.$('#zip').onclick = () => G.baixar(G.m(`/api/cib/remessas/${b.dataset.env}/arquivo?formato=zip`), 'remessa.zip').catch(G.falha);
+    m.$('[data-a=c]').onclick = m.fechar;
+    m.$('[data-a=s]').onclick = async () => { try { await G.post(`/api/cib/remessas/${b.dataset.env}/enviar`, { modo: m.$('#md').value, idArquivo: m.$('#ida').value }); G.toast('Remessa enviada.'); m.fechar(); remessas(v); } catch (e) { G.falha(e); } };
+  }));
+  const pos = (r) => G.toast(r.repetido ? r.mensagem : `Retorno: ${r.efetivados} efetivado(s) (${r.comFalhas} com falhas), ${r.rejeitados} rejeitado(s), ${r.ignorados} já respondido(s)${r.semIdentificacao ? `, ${r.semIdentificacao} sem inscrição` : ''}.`, r.repetido);
+  v.querySelectorAll('[data-cons]').forEach((b) => (b.onclick = async () => { try { pos(await G.post(`/api/cib/remessas/${b.dataset.cons}/consultar`)); remessas(v); } catch (e) { G.falha(e); } }));
+  v.querySelectorAll('[data-sim]').forEach((b) => (b.onclick = async () => { try { pos(await G.post(`/api/cib/remessas/${b.dataset.sim}/simular-retorno`)); remessas(v); } catch (e) { G.falha(e); } }));
+  v.querySelectorAll('[data-ret]').forEach((b) => (b.onclick = () => importarRetorno(Number(b.dataset.ret), () => remessas(v), pos)));
+  const reproc = async (ids) => { try { const r = await G.post('/api/cib/reprocessamento', ids ? { ids } : {}); G.toast(`${r.reenfileirados} de volta à fila · ${r.comErros} ainda com erro (veja o ciclo mensal).`); remessas(v); } catch (e) { G.falha(e); } };
+  if (el('rp-todos')) el('rp-todos').onclick = () => reproc(null);
+  if (el('rp-sel')) el('rp-sel').onclick = () => { const ids = [...v.querySelectorAll('[data-rp]:checked')].map((c) => Number(c.dataset.rp)); if (!ids.length) return G.toast('Selecione ao menos um.', true); reproc(ids); };
+}
+function mostrarExcluidos(lista) {
+  G.modal({ titulo: `Fora da remessa por falha de leiaute (${lista.length})`, largo: true,
+    corpo: `<p class="small dim" style="margin-top:0">Esses imóveis voltaram para o ciclo mensal como "capturada" com a falha apontada. Corrija o cadastro e valide de novo.</p>
+      <table class="t">${lista.map((x) => `<tr><td class="mono">${esc(x.inscricao)}</td><td>${G.pill(x.tipo)}</td><td>${falhasHtml(x.falhas.map((f) => ({ codigo: f.codigo, mensagem: f.mensagem, campos: [f.campo] })))}</td></tr>`).join('')}</table>` });
 }
 async function itensRemessa(id) {
   const lista = await G.get('/api/cib/movimentacoes?remessa=' + id);
-  G.modal({ titulo: `Itens da remessa (${lista.length})`, largo: true, corpo: `<div class="tbl-wrap"><table class="t"><thead><tr><th>Inscrição</th><th>Tipo</th><th>Origem</th><th>Status</th><th>Retorno</th></tr></thead><tbody>${lista.map((x) => `<tr><td class="mono">${esc(x.inscricao)}</td><td>${G.pill(x.tipo)}</td><td class="small">${esc(G.ROT[x.origem] || x.origem)}</td><td>${G.pill(x.status)}</td><td class="small">${esc(x.retornoMsg)}</td></tr>`).join('')}</tbody></table></div>` });
+  G.modal({ titulo: `Itens da remessa (${lista.length} movimentações)`, largo: true, corpo: `<div class="tbl-wrap"><table class="t"><thead><tr><th>Inscrição</th><th>Tipo</th><th>Origem</th><th>Status</th><th>Retorno</th></tr></thead><tbody>${lista.map((x) => `<tr><td class="mono">${esc(x.inscricao)}</td><td>${G.pill(x.tipo)}</td><td class="small">${esc(G.ROT[x.origem] || x.origem)}</td><td>${G.pill(x.status)}</td><td class="small">${esc(x.retornoMsg)}${falhasHtml(x.falhasSinter)}</td></tr>`).join('')}</tbody></table></div>` });
 }
-function importarRetorno(id, depois) {
+function importarRetorno(id, depois, pos) {
   const m = G.modal({
     titulo: 'Importar retorno do Sinter', largo: true,
-    corpo: `<p class="small dim" style="margin-top:0">CSV com as colunas <span class="mono">inscricao; situacao (ok | divergente | erro); cib; campo; valor_externo; mensagem</span>. Aceita também JSON (lista de objetos).</p>
-      <input type="file" id="arq" accept=".csv,.txt,.json" /><div id="prev" class="small" style="margin-top:10px"></div>`,
+    corpo: `<p class="small dim" style="margin-top:0">Aceita a resposta <strong>oficial</strong> da consulta de processamento (JSON com <span class="mono">registros[]</span>: inscricaoImobiliaria, cib, efetivado, falhas) — uma página ou várias —
+      ou uma planilha CSV <span class="mono">inscricao; situacao (ok | erro | divergente); cib; campo; valor_externo; mensagem</span>. A leitura é feita no servidor; o mesmo retorno importado duas vezes não altera nada.</p>
+      <input type="file" id="arq" accept=".json,.csv,.txt" /><div id="prev" class="small" style="margin-top:10px"></div>`,
     rodape: `<span></span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s" disabled>Processar retorno</button></div>`,
   });
-  let itens = [];
+  let conteudo = '';
   m.$('[data-a=c]').onclick = m.fechar;
-  m.$('#arq').onchange = async (e) => {
-    const txt = await e.target.files[0].text();
-    try {
-      if (txt.trim().startsWith('[') || txt.trim().startsWith('{')) { const j = JSON.parse(txt); itens = Array.isArray(j) ? j : (j.itens || []); }
-      else {
-        const { cab, linhas } = G.parseCsv(txt);
-        const ks = cab.map((h) => ({ inscricao_municipal: 'inscricao', valor_sinter: 'valorExterno', valor_externo: 'valorExterno', valor_municipio: 'valorMunicipio', status: 'situacao' }[G.norm(h)] || G.norm(h)));
-        itens = linhas.map((l) => Object.fromEntries(ks.map((k, i) => [k, l[i]])));
-      }
-      const cont = itens.reduce((a, x) => ((a[String(x.situacao || 'ok').toLowerCase()] = (a[String(x.situacao || 'ok').toLowerCase()] || 0) + 1), a), {});
-      m.$('#prev').innerHTML = `${itens.length} itens · ${Object.entries(cont).map(([k, n]) => `${esc(k)}: ${n}`).join(' · ')}`;
-      m.$('[data-a=s]').disabled = !itens.length;
-    } catch (err) { m.$('#prev').textContent = 'Arquivo inválido: ' + err.message; }
-  };
-  m.$('[data-a=s]').onclick = async () => {
-    try { const r = await G.post(`/api/cib/remessas/${id}/retorno`, { itens }); G.toast(`Retorno: ${r.ok} conciliados, ${r.divergentes} divergentes, ${r.rejeitadas} rejeitados, ${r.ignorados} ignorados.`); m.fechar(); depois(); } catch (e) { G.falha(e); }
-  };
+  m.$('#arq').onchange = async (e) => { conteudo = await e.target.files[0].text(); m.$('#prev').textContent = `${e.target.files[0].name} · ${(conteudo.length / 1024).toFixed(1)} KB`; m.$('[data-a=s]').disabled = !conteudo; };
+  m.$('[data-a=s]').onclick = async () => { try { pos(await G.post(`/api/cib/remessas/${id}/retorno`, { conteudo })); m.fechar(); depois(); } catch (e) { G.falha(e); } };
 }
 
 // ------------------------------------------------------------------ CONCILIACAO
 async function conciliacao(v) {
   const st = (S.params && S.params.status) || 'aberta';
   const lista = await G.get('/api/cib/divergencias?status=' + st);
-  v.innerHTML = `${cabecalho('Conciliar', 'Divergências', 'Cruzamento entre o cadastro municipal, o Sinter e os cartórios. Para cada divergência: adotar o dado externo (o cadastro é ajustado e a alteração retransmitida), manter o dado municipal (retransmite com justificativa) ou desconsiderar.',
+  v.innerHTML = `${cabecalho('Conciliar', 'Divergências', 'Falhas apontadas pelo Sinter em registros efetivados (ex.: CPF/CNPJ com DV inválido), diferenças na conferência da UI e divergências com cartório. Resolva: adotar o valor externo (o cadastro é ajustado e retransmitido), retransmitir (depois de corrigir o cadastro, ou mantendo o dado municipal) ou desconsiderar — sempre com justificativa.',
     `<select id="fst" class="b"><option value="aberta" ${st === 'aberta' ? 'selected' : ''}>Abertas</option><option value="resolvida" ${st === 'resolvida' ? 'selected' : ''}>Resolvidas</option><option value="ignorada" ${st === 'ignorada' ? 'selected' : ''}>Desconsideradas</option></select>`)}
     <div class="tbl-wrap"><table class="t"><thead><tr><th>Inscrição</th><th>Fonte</th><th>Campo</th><th>Município</th><th>Externo</th><th>Mensagem</th><th>Remessa</th><th></th></tr></thead><tbody>
-    ${lista.map((d) => `<tr><td class="mono"><a href="#" data-im="${d.imovel_id}">${esc(d.inscricao)}</a><div class="dim small">${esc(d.logradouro)} ${esc(d.numero)}</div></td><td>${esc(d.fonte)}</td><td>${esc(G.ROTULO_CAMPO[d.campo] || d.campo || '—')}</td>
+    ${lista.map((d) => `<tr><td class="mono"><a href="#" data-im="${d.imovel_id}">${esc(d.inscricao)}</a><div class="dim small">${esc(d.logradouro)} ${esc(d.numero)}</div></td><td>${esc(d.fonte)}</td><td>${esc(d.campo_rotulo || d.campo || '—')}</td>
       <td><strong>${esc(d.valor_municipio || '—')}</strong></td><td><strong>${esc(d.valor_externo || '—')}</strong></td><td class="small">${esc(d.mensagem)}${d.resolucao ? `<div class="dim">${esc(d.resolucao)} — ${esc(d.resolvido_por_nome)}</div>` : ''}</td>
       <td class="mono">${d.remessa_numero ? String(d.remessa_numero).padStart(2, '0') : '—'}</td>
-      <td style="white-space:nowrap">${d.status === 'aberta' ? `<button class="b sm ok" data-a="adotar_externo" data-id="${d.id}">Adotar externo</button> <button class="b sm" data-a="manter_municipio" data-id="${d.id}">Manter municipal</button> <button class="b sm" data-a="ignorar" data-id="${d.id}">Desconsiderar</button>` : G.pill(d.status)}</td></tr>`).join('') || '<tr><td colspan="8" class="vazio">Nenhuma divergência.</td></tr>'}
+      <td style="white-space:nowrap" class="w">${d.status === 'aberta' ? `${d.valor_externo ? `<button class="b sm ok" data-a="adotar_externo" data-id="${d.id}">Adotar externo</button> ` : ''}<button class="b sm" data-a="retransmitir" data-id="${d.id}">Retransmitir</button> <button class="b sm" data-a="ignorar" data-id="${d.id}">Desconsiderar</button>` : G.pill(d.status)}</td></tr>`).join('') || '<tr><td colspan="8" class="vazio">Nenhuma divergência.</td></tr>'}
     </tbody></table></div>`;
   el('fst').onchange = () => irPara('conciliacao', { status: el('fst').value });
   v.querySelectorAll('[data-im]').forEach((a) => (a.onclick = (e) => { e.preventDefault(); fichaImovel(Number(a.dataset.im)); }));
   v.querySelectorAll('button[data-a]').forEach((b) => (b.onclick = async () => {
-    const txt = { adotar_externo: 'O cadastro municipal será ajustado para o valor externo e a alteração entra na próxima remessa.', manter_municipio: 'O dado municipal será retransmitido com justificativa.', ignorar: 'A divergência será desconsiderada.' }[b.dataset.a];
+    const txt = { adotar_externo: 'O cadastro municipal será ajustado para o valor externo e a alteração entra na próxima remessa.', retransmitir: 'O estado atual do cadastro (já corrigido, ou o dado municipal mantido) será retransmitido ao Sinter.', ignorar: 'A divergência será desconsiderada.' }[b.dataset.a];
     const just = await G.confirmar('Resolver divergência', txt, { campo: 'Justificativa (fica na auditoria)', rotulo: 'Confirmar' });
     if (just == null) return;
     try { await G.post(`/api/cib/divergencias/${b.dataset.id}/resolver`, { acao: b.dataset.a, resolucao: just }); G.toast('Divergência resolvida.'); conciliacao(v); atualizarBadges(); } catch (e) { G.falha(e); }
@@ -671,20 +798,35 @@ async function implantacao(v) {
 }
 
 // ------------------------------------------------------------------ PGV
-async function pgv(v) {
-  const d = await G.get('/api/cib/pgv');
+async function pgv(v, params) {
+  const d = await G.get('/api/cib/pgv' + (params.ano ? `?ano=${params.ano}` : ''));
   const val = (t, k) => d.valores.find((x) => x.tipo === t && x.chave.toUpperCase() === String(k).toUpperCase())?.valor ?? '';
-  const ano = d.valores[0]?.ano || new Date().getFullYear();
-  v.innerHTML = `${cabecalho('Serviço complementar', 'Planta Genérica de Valores', 'Valores de referência por m² de terreno (por bairro/zona) e de construção (por padrão construtivo). Ao salvar, o valor venal de todos os imóveis é recalculado — e passa a sair na Certidão de Valor Venal.',
-    `<label class="small dim">Exercício <input id="ano" type="number" value="${ano}" style="width:90px" class="b" /></label><button class="b pri" id="bt-salvar">Salvar e recalcular</button>`)}
-    <div class="grid2 eq"><div class="box"><h3>Terreno · R$/m² por bairro</h3><table class="t" id="tt">
-      ${[...d.bairros, '*'].map((b) => `<tr><td>${b === '*' ? '<em>demais (padrão)</em>' : esc(b)}</td><td><input data-t="terreno" data-k="${esc(b)}" value="${val('terreno', b)}" inputmode="decimal" style="width:120px" class="b" /></td></tr>`).join('')}</table></div>
-    <div class="box"><h3>Construção · R$/m² por padrão</h3><table class="t">${d.padroes.map((p) => `<tr><td>${esc(p)}</td><td><input data-t="construcao" data-k="${p}" value="${val('construcao', p)}" inputmode="decimal" style="width:120px" class="b" /></td></tr>`).join('')}</table>
-      <h3 style="margin-top:18px">Valor venal por bairro</h3><table class="t small"><thead><tr><th>Bairro</th><th class="num">Imóveis</th><th class="num">Médio</th><th class="num">Total</th></tr></thead>
-      ${d.resumo.map((r) => `<tr><td>${esc(r.bairro)}</td><td class="num">${r.n}</td><td class="num">${G.brl(r.medio)}</td><td class="num">${G.brl(r.total)}</td></tr>`).join('')}</table></div></div>`;
-  el('bt-salvar').onclick = async () => {
-    const pega = (t) => [...v.querySelectorAll(`[data-t=${t}]`)].filter((i) => i.value !== '').map((i) => ({ chave: i.dataset.k, valor: i.value }));
-    try { await G.put('/api/cib/pgv', { ano: Number(el('ano').value), terreno: pega('terreno'), construcao: pega('construcao') }); G.toast('PGV salva e valores venais recalculados.'); pgv(v); } catch (e) { G.falha(e); }
+  const ex = d.exercicios.find((e) => e.ano === d.ano);
+  const ed = d.editavel;
+  v.innerHTML = `${cabecalho('Serviço complementar', 'Planta Genérica de Valores', 'Versionada por exercício: cada ano tem seus valores. Um exercício em rascunho é editável e não afeta nada; ao publicar, ele vira o vigente e o valor venal de toda a base é recalculado numa única transação. Certidões já emitidas não mudam (conteúdo congelado na emissão).',
+    `<select id="ano" class="b">${d.exercicios.map((e) => `<option value="${e.ano}" ${e.ano === d.ano ? 'selected' : ''}>${e.ano} · ${e.status}</option>`).join('') || '<option>sem exercícios</option>'}</select>
+     <button class="b w" id="bt-novo">＋ Novo exercício</button>${ed ? '<button class="b w" id="bt-salvar">Salvar rascunho</button><button class="b pri w" id="bt-pub">Publicar e recalcular</button>' : ''}`)}
+    ${ex ? `<div class="toolbar2 small">${G.pill(ex.status === 'vigente' ? 'conciliado' : ex.status === 'rascunho' ? 'pendente' : 'baixa', ex.status)} ${ex.ato_legal ? 'Ato legal: <strong>' + esc(ex.ato_legal) + '</strong>' : ''} ${ex.publicado_em ? `· publicado em ${G.dataHora(ex.publicado_em)} por ${esc(ex.publicado_por || '—')}` : ''}
+      ${ed ? '' : ' · <span class="dim">valores travados — crie um novo exercício para alterar</span>'}</div>` : '<div class="vazio">Nenhum exercício. Crie o primeiro.</div>'}
+    ${ex ? `<div class="grid2 eq"><div class="box"><h3>Terreno · R$/m² por bairro</h3><table class="t">
+      ${[...d.bairros, '*'].map((b) => `<tr><td>${b === '*' ? '<em>demais (padrão)</em>' : esc(b)}</td><td><input data-t="terreno" data-k="${esc(b)}" value="${val('terreno', b)}" inputmode="decimal" style="width:120px" class="b" ${ed ? '' : 'disabled'} /></td></tr>`).join('')}</table>
+      ${ed ? '<label class="small dim" style="display:block;margin-top:10px">Ato legal<input id="ato" class="b" style="width:100%" value="' + esc(ex.ato_legal || '') + '" placeholder="Lei Complementar nº …" /></label>' : ''}</div>
+    <div class="box"><h3>Construção · R$/m² por padrão</h3><table class="t">${d.padroes.map((p) => `<tr><td>${esc(p)}</td><td><input data-t="construcao" data-k="${p}" value="${val('construcao', p)}" inputmode="decimal" style="width:120px" class="b" ${ed ? '' : 'disabled'} /></td></tr>`).join('')}</table>
+      <h3 style="margin-top:18px">Valor venal atual por bairro</h3><table class="t small"><thead><tr><th>Bairro</th><th class="num">Imóveis</th><th class="num">Médio</th><th class="num">Total</th></tr></thead>
+      ${d.resumo.map((r) => `<tr><td>${esc(r.bairro)}</td><td class="num">${r.n}</td><td class="num">${G.brl(r.medio)}</td><td class="num">${G.brl(r.total)}</td></tr>`).join('')}</table>
+      ${d.recalculos.length ? `<h3 style="margin-top:18px">Recálculos</h3><table class="t small">${d.recalculos.map((r) => `<tr><td>${G.dataHora(r.created_at)}</td><td>exercício ${r.ano}</td><td class="num">${r.qtd_imoveis} imóveis</td><td class="num">${G.brl(r.total_antes)} → ${G.brl(r.total_depois)}</td></tr>`).join('')}</table>` : ''}</div></div>` : ''}`;
+  if (el('ano')) el('ano').onchange = () => pgv(v, { ano: Number(el('ano').value) });
+  el('bt-novo').onclick = async () => {
+    const ano = await G.confirmar('Novo exercício da PGV', `Informe o ano. Os valores serão copiados do exercício ${d.ano || '—'} para você ajustar.`, { campo: 'Ano do exercício', rotulo: 'Criar', placeholder: String((d.ano || new Date().getFullYear()) + 1) });
+    if (!ano) return;
+    try { await G.post('/api/cib/pgv/exercicios', { ano: Number(ano), copiarDe: d.ano || undefined }); pgv(v, { ano: Number(ano) }); } catch (e) { G.falha(e); }
+  };
+  const pega = (t) => [...v.querySelectorAll(`[data-t=${t}]`)].filter((i) => i.value !== '').map((i) => ({ chave: i.dataset.k, valor: i.value }));
+  const salvar = () => G.put('/api/cib/pgv', { ano: d.ano, terreno: pega('terreno'), construcao: pega('construcao'), atoLegal: el('ato')?.value });
+  if (el('bt-salvar')) el('bt-salvar').onclick = async () => { try { await salvar(); G.toast('Rascunho salvo (nenhum imóvel foi alterado).'); pgv(v, { ano: d.ano }); } catch (e) { G.falha(e); } };
+  if (el('bt-pub')) el('bt-pub').onclick = async () => {
+    if (!(await G.confirmar(`Publicar o exercício ${d.ano}`, 'O exercício vira o vigente (o anterior é encerrado) e o valor venal de toda a base é recalculado agora, numa única transação. Certidões já emitidas não mudam.', { rotulo: 'Publicar' }))) return;
+    try { await salvar(); const r = await G.post(`/api/cib/pgv/${d.ano}/publicar`, { atoLegal: el('ato')?.value }); G.toast(`Exercício ${r.ano} vigente · ${r.qtd} imóveis recalculados.`); pgv(v, { ano: d.ano }); } catch (e) { G.falha(e); }
   };
 }
 
@@ -713,16 +855,49 @@ async function config(v) {
 
 // ------------------------------------------------------------------ AUDITORIA
 async function auditoria(v) {
-  const lista = await G.get('/api/cib/auditoria?limit=500');
-  v.innerHTML = `${cabecalho('Tudo documentado', 'Trilha de auditoria', 'Cada importação, edição, validação, remessa (com hash do arquivo), retorno, conciliação, documento e mudança de etapa — com data e responsável. A rotina sobrevive à troca de equipe.',
+  const admin = !G.auth || G.user?.role === 'admin';
+  const [lista, lgpd] = await Promise.all([G.get('/api/cib/auditoria?limit=500'), admin ? G.get('/api/lgpd/acessos?limit=300').catch(() => []) : []]);
+  v.innerHTML = `${cabecalho('Tudo documentado', 'Trilha de auditoria', 'Cada importação, edição (antes → depois, com CPF/CNPJ mascarado), validação, remessa (com hash do arquivo), retorno, conciliação, documento e etapa — com data e responsável. A trilha é somente-inserção no banco: não pode ser editada nem apagada.',
     '<input type="search" id="q" placeholder="Filtrar…" class="b" />')}
-    <div class="tbl-wrap"><table class="t"><thead><tr><th>Quando</th><th>Entidade</th><th>Ação</th><th>Detalhe</th><th>Responsável</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+    <div class="subtabs"><button class="on" data-st="aud">Ações (${lista.length})</button>${admin ? `<button data-st="lgpd">Acessos a dados pessoais — LGPD (${lgpd.length})</button>` : ''}</div>
+    <div data-sv="aud"><div class="tbl-wrap"><table class="t"><thead><tr><th>Quando</th><th>Entidade</th><th>Ação</th><th>Detalhe</th><th>Responsável</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+    <div data-sv="lgpd" hidden><p class="small dim">Quem viu CPF/CNPJ completo, abriu documento com dados pessoais ou exportou arquivo de remessa — com finalidade e IP.</p>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Quando</th><th>Usuário</th><th>Perfil</th><th>Dado</th><th>Registro</th><th>Finalidade</th><th>IP</th></tr></thead><tbody>
+      ${lgpd.map((a) => `<tr><td class="small" style="white-space:nowrap">${G.dataHora(a.created_at)}</td><td>${esc(a.usuario_nome)}</td><td>${esc(a.perfil)}</td><td>${esc(a.dado)}</td><td class="small">${esc(a.entidade)} #${a.entidade_id ?? '—'}</td><td class="small">${esc(a.finalidade)}</td><td class="mono small">${esc(a.ip)}</td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Nenhum acesso registrado.</td></tr>'}</tbody></table></div></div>`;
+  v.querySelectorAll('.subtabs button').forEach((b) => (b.onclick = () => {
+    v.querySelectorAll('.subtabs button').forEach((x) => x.classList.toggle('on', x === b));
+    v.querySelectorAll('[data-sv]').forEach((s) => (s.hidden = s.dataset.sv !== b.dataset.st));
+  }));
   const pintar = () => {
     const q = G.norm(el('q').value);
     el('tb').innerHTML = lista.filter((a) => !q || G.norm(`${a.entidade} ${a.acao} ${a.detalhe} ${a.usuario_nome}`).includes(q))
       .map((a) => `<tr><td class="small" style="white-space:nowrap">${G.dataHora(a.created_at)}</td><td>${esc(a.entidade)}</td><td><span class="pill p-pronto">${esc(a.acao)}</span></td><td class="small">${esc(a.detalhe)}</td><td class="small">${esc(a.usuario_nome)}</td></tr>`).join('') || '<tr><td colspan="5" class="vazio">Sem registros.</td></tr>';
   };
   el('q').oninput = pintar; pintar();
+}
+
+// ------------------------------------------------------------------ USUARIOS (admin)
+async function usuarios(v) {
+  const lista = await G.get('/api/usuarios?todos=1');
+  const PERFIS = { admin: 'Administrador', coordenador: 'Coordenador', tecnico: 'Técnico', gestor: 'Gestor — somente leitura' };
+  v.innerHTML = `${cabecalho('Acesso', 'Usuários e perfis', '<strong>Gestor</strong> é somente leitura (prefeito, controle interno): vê painel, relatórios e documentos — sem CPF/CNPJ completo e sem nenhuma alteração. Técnico opera o cadastro; coordenador também transmite ao Sinter, configura e emite documentos; admin gerencia usuários.',
+    '<button class="b pri" id="bt-novo">＋ Novo usuário</button>')}
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>Nome</th><th>E-mail</th><th>Equipe</th><th>Perfil</th><th>Ativo</th><th></th></tr></thead><tbody>
+    ${lista.map((u) => `<tr><td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td>${esc(u.equipe)}</td>
+      <td><select data-role="${u.id}" class="b sm">${Object.entries(PERFIS).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td>${u.ativo ? G.pill('valido', 'ativo') : G.pill('baixado', 'inativo')}</td>
+      <td><button class="b sm" data-at="${u.id}" data-v="${u.ativo ? 0 : 1}">${u.ativo ? 'desativar' : 'reativar'}</button> <button class="b sm" data-pw="${u.id}">nova senha</button></td></tr>`).join('')}</tbody></table></div>`;
+  const patch = async (id, body, msg) => { try { await G.api('/api/usuarios/' + id, { method: 'PATCH', body }); G.toast(msg); usuarios(v); } catch (e) { G.falha(e); usuarios(v); } };
+  v.querySelectorAll('[data-role]').forEach((s) => (s.onchange = () => patch(s.dataset.role, { role: s.value }, 'Perfil alterado.')));
+  v.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => patch(b.dataset.at, { ativo: b.dataset.v === '1' }, 'Usuário atualizado.')));
+  v.querySelectorAll('[data-pw]').forEach((b) => (b.onclick = async () => { const s = await G.confirmar('Nova senha', 'Defina a nova senha (mín. 10 caracteres em produção).', { campo: 'Senha', rotulo: 'Salvar' }); if (s) patch(b.dataset.pw, { senha: s }, 'Senha alterada.'); }));
+  el('bt-novo').onclick = () => {
+    const m = G.modal({ titulo: 'Novo usuário', corpo: `<div class="f"><label>Nome<input id="u-n" /></label><label>E-mail<input id="u-e" type="email" /></label><label>Senha inicial<input id="u-s" type="password" /></label>
+      <label>Perfil<select id="u-r">${Object.entries(PERFIS).map(([k, l]) => `<option value="${k}" ${k === 'tecnico' ? 'selected' : ''}>${l}</option>`).join('')}</select></label><label>Equipe<input id="u-q" /></label></div>`,
+      rodape: `<span></span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s">Criar</button></div>` });
+    m.$('[data-a=c]').onclick = m.fechar;
+    m.$('[data-a=s]').onclick = async () => { try { await G.api('/api/usuarios', { method: 'POST', body: { nome: m.$('#u-n').value, email: m.$('#u-e').value, senha: m.$('#u-s').value, role: m.$('#u-r').value, equipe: m.$('#u-q').value } }); G.toast('Usuário criado.'); m.fechar(); usuarios(v); } catch (e) { G.falha(e); } };
+  };
 }
 
 // ------------------------------------------------------------------ boot
@@ -733,8 +908,9 @@ window.addEventListener('hashchange', () => {
 
 (async () => {
   if (!(await G.iniciar({ aoTrocar: () => render() }))) return;
+  if (!G.auth || G.user?.role === 'admin') el('tab-usuarios').hidden = false;
   const h = location.hash.slice(1);
   const q = new URLSearchParams(location.search).get('q');
   if (q) return irPara('imoveis', { q });
-  irPara(['painel', 'imoveis', 'ciclo', 'remessas', 'conciliacao', 'vistoria', 'implantacao', 'pgv', 'config', 'auditoria'].includes(h) ? h : 'painel');
+  irPara(['painel', 'imoveis', 'ciclo', 'remessas', 'conciliacao', 'vistoria', 'implantacao', 'pgv', 'config', 'auditoria', 'usuarios'].includes(h) ? h : 'painel');
 })();

@@ -72,7 +72,7 @@ Pré-requisitos: Node 18+ e um PostgreSQL com PostGIS (uma conta gratuita no
 ```bash
 npm install
 cp .env.example .env        # edite e cole a DATABASE_URL do Neon
-npm run init-db             # cria extensão PostGIS, tabelas e índices (Território)
+npm run migrate             # aplica as migrations (PostGIS, tabelas, índices, travas)
 npm run seed                # (opcional) carrega a cidade de demonstração
 npm start                   # http://localhost:3000  (landing), /territorio  e  /os
 ```
@@ -91,13 +91,13 @@ baixa e reativação precisa chegar ao Sinter. Tudo em `/cib/`, por município:
 | Aba | O que faz |
 |-----|-----------|
 | **Painel** | Imóveis com CIB, pendências, alterações no mês, contagem até o prazo, o ciclo mensal com filas de trabalho, mapa do cadastro por status e últimas movimentações. |
-| **Imóveis** | Cadastro fiscal (inscrição ↔ lote do CTM ↔ CIB): busca, ficha com pendências, histórico Sinter e documentos, edição, baixa/reativação e **importação da base** (CSV do sistema tributário, colunas reconhecidas pelo nome). |
+| **Imóveis** | Cadastro fiscal (inscrição ↔ lote do CTM ↔ CIB) com os campos do leiaute (tipo arquitetônico, destinação, tipo de logradouro, titularidade, CNM): ficha com pendências, histórico Sinter e documentos; CPF/CNPJ (inclusive **alfanumérico**) mascarado, com acesso registrado; **importação incremental e idempotente** da base do sistema tributário, com relatório do que mudou (também por linha de comando agendada). |
 | **Ciclo mensal** | *Capturar → Validar*: eventos de ITBI, alvará, habite-se, BCI, requerimento ou manual; **parcelamento** (baixa das origens + inclusão das novas). Validar aplica no cadastro e põe na fila da remessa. |
-| **Remessas** | *Transmitir*: carga inicial, remessa numerada, arquivo JSON/CSV (layout `BzR-Sinter/1.0`, adaptável ao Manual Operacional), envio em lote (protocolo) ou via API (`SINTER_API_URL`), hash SHA-256 e **importação do retorno**. |
+| **Remessas** | *Transmitir*: remessa numerada no **leiaute oficial do Sinter** (Manual Operacional 1.17 — NDJSON `{ui, operacao: I/A/D}` em .zip), cada registro validado antes de gerar, arquivo congelado com SHA-256, envio pela API do Sinter (OAuth) ou em lote (idArquivo), retorno oficial (efetivados/rejeitados/falhas) **idempotente** e fila de reprocessamento dos rejeitados. Ver [`docs/sinter-leiaute.md`](docs/sinter-leiaute.md). |
 | **Conciliação** | Divergências do retorno (Sinter/cartório): adotar o dado externo, manter o municipal (retransmite) ou desconsiderar — com justificativa. |
 | **Vistoria IA** | Cruza a camada de edificações (extraída da ortofoto) com o cadastro: edificação nova, ampliação ou possível demolição viram lista de vistoria; agendar cria demanda de campo, confirmar captura o evento, notificar emite a notificação. |
 | **Implantação** | As 5 etapas (Diagnóstico, Saneamento, Integração, Conciliação, Internalização) com indicadores em tempo real, checklist de adesão ao convênio e raio-x da base com prazo estimado. |
-| **PGV** | Planta Genérica de Valores (R$/m² por bairro e por padrão construtivo) e recálculo do valor venal. |
+| **PGV** | Planta Genérica de Valores **versionada por exercício** (rascunho → vigente → encerrado); publicar recalcula a base numa única transação, com histórico; certidões emitidas não mudam. |
 | **Município** | Dados do órgão emissor (brasão, secretaria, assinaturas, convênio, transmissores) usados nos documentos e nas remessas. |
 | **Auditoria** | Trilha de tudo: importações, edições (antes → depois), validações, remessas, retornos, conciliações, documentos e etapas. |
 
@@ -106,10 +106,21 @@ no Território tem o atalho "Imóvel / CIB"; vistoria agendada cria demanda.
 As regras de validação (CPF/CNPJ, logradouro, bairro, áreas, vínculo e área
 geométrica do lote, matrícula, CEP) ficam em `src/cib-validacao.js`.
 
-> O CIB e o retorno do Sinter vêm da Receita Federal. Sem credenciais do
-> convênio, o envio é **em lote** (arquivo + protocolo) e o retorno é importado
-> por arquivo. `CIB_SIMULAR_RETORNO=true` habilita um retorno simulado — **apenas
-> para demonstração**.
+> O CIB e o retorno vêm da Receita Federal. Com as credenciais do convênio
+> (`SINTER_CLIENT_ID/SECRET`) o envio e a consulta do retorno são automáticos;
+> sem elas, o envio é em lote (arquivo .zip + idArquivo). `CIB_SIMULAR_RETORNO=true`
+> gera retornos fictícios **só fora de produção** (CIBs marcados como simulados).
+
+## Produção e operação
+
+- **Um deploy e um banco por prefeitura** — decisão em [`docs/adr/0001-um-deploy-por-prefeitura.md`](docs/adr/0001-um-deploy-por-prefeitura.md); `MUNICIPIO` trava a instância.
+- **`NODE_ENV=production` falha o boot** sem login (`AUTH_ENABLED=true`), com `AUTH_SECRET` fraco/ausente, sem `MUNICIPIO`/`PUBLIC_BASE_URL`, ou com qualquer flag de demonstração (`SEED_*_DEMO`, `CIB_SIMULAR_RETORNO`).
+- Login em todas as APIs internas (Território e O.S. inclusive); perfis **admin, coordenador, técnico e gestor (somente leitura)**; limite de tentativas no login e nas páginas públicas de validação/protocolo.
+- **Migrations versionadas** (`migrations/`, `npm run migrate`), **backup com restauração testada** (`npm run backup` / `npm run restore-test`), documentos e trilhas **imutáveis no banco** (trigger), numeração sem duplicidade (numeradores transacionais).
+- **LGPD:** CPF/CNPJ mascarado nas listas e fichas, acesso ao dado completo com finalidade e registro; exportações com CPF só para admin/coordenador.
+- Módulos por cliente: `MODULOS=cib,documentos,territorio`.
+- Testes: `npm test` (com `TEST_DATABASE_URL`, também os de integração).
+- Passo a passo: [`docs/operacao.md`](docs/operacao.md).
 
 ## Módulo Documentos e Atendimento
 

@@ -5,6 +5,10 @@ import { query, closePool, isConfigured } from '../src/db.js';
 import { ensureSchema, LAYERS } from '../src/schema.js';
 
 (async () => {
+  if (process.env.NODE_ENV === 'production' && !process.argv.includes('--sim-apagar-producao')) {
+    console.error('reset-db apaga dados: bloqueado em produção (use --sim-apagar-producao se for mesmo isso).');
+    process.exit(1);
+  }
   if (!isConfigured) {
     console.error('DATABASE_URL nao configurada. Crie um .env a partir de .env.example.');
     process.exit(1);

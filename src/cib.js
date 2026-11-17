@@ -17,11 +17,19 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { query, withTransaction, isConfigured } from './db.js';
 import { requireAuth, requireRole } from './auth.js';
-import { validarImovel, temErro, mascararDoc, soDigitos, isoData } from './cib-validacao.js';
+import { validarImovel, temErro, mascararDoc, isoData } from './cib-validacao.js';
+import { normalizarNi, soDigitos } from './ni.js';
+import { MUNICIPIO_FIXO, SIMULACAO_SINTER } from './env.js';
+import { muniDe, nomeUsuario, erro, num, competenciaDe, rotaAsync, TZ, mascararCampos } from './util.js';
+import { carregarPgvVigente, calcularValorVenal } from './pgv.js';
+import { registrarAcesso, PERFIS_DADOS_PESSOAIS } from './lgpd.js';
+import { MOTIVO_DESATIVACAO } from './sinter/dominios.js';
+import { tipoLogradouroDoNome, destinacaoDoUso } from './sinter/leiaute.js';
+export { competenciaDe };
 
 export const TIPOS_MOV = ['inclusao', 'alteracao', 'baixa', 'reativacao'];
-export const ORIGENS = ['itbi', 'alvara', 'habite_se', 'parcelamento', 'bci', 'ia_vistoria', 'requerimento', 'manual', 'implantacao', 'conciliacao'];
-export const STATUS_MOV = ['capturada', 'validada', 'transmitida', 'conciliada', 'divergente', 'rejeitada', 'descartada'];
+export const ORIGENS = ['itbi', 'alvara', 'habite_se', 'parcelamento', 'bci', 'ia_vistoria', 'requerimento', 'manual', 'implantacao', 'conciliacao', 'sistema_tributario'];
+export const STATUS_MOV = ['capturada', 'validada', 'transmitida', 'conciliada', 'divergente', 'rejeitada', 'descartada', 'nao_transmissivel'];
 export const ETAPAS = [
   { n: 1, id: 'diagnostico', titulo: 'Diagnóstico', descricao: 'Raio-x da base atual: inscrições, lotes, logradouros, duplicidades e lacunas.' },
   { n: 2, id: 'saneamento', titulo: 'Saneamento', descricao: 'Correção de geometria, chaves e atributos, no padrão do Manual Operacional do Sinter.' },
@@ -47,6 +55,9 @@ export const CAMPOS_IMOVEL = {
   matricula_cartorio: 'texto', cartorio: 'texto',
   area_terreno_m2: 'num', area_construida_m2: 'num', testada_m: 'num', n_pavimentos: 'int',
   padrao_construtivo: 'texto', ano_construcao: 'int', observacoes: 'texto',
+  // Leiaute oficial do Sinter (Manual Operacional 1.17) — códigos de domínio:
+  tipo_logradouro: 'int', tp_arquitetonico: 'int', destinacao: 'int', bice: 'int', tem_bairro: 'bool',
+  titular_tipo: 'int', titular_doc_tipo: 'int', titular_dt_aquisicao: 'data', titular_perc: 'num', cnm_ri: 'texto', cns_ri: 'int',
 };
 export const ROTULOS = {
   inscricao: 'Inscrição', lote_codigo: 'Código do lote', cib: 'CIB', tipo: 'Tipo', uso: 'Uso',
@@ -56,25 +67,14 @@ export const ROTULOS = {
   matricula_cartorio: 'Matrícula', cartorio: 'Cartório',
   area_terreno_m2: 'Área do terreno (m²)', area_construida_m2: 'Área construída (m²)', testada_m: 'Testada (m)',
   n_pavimentos: 'Pavimentos', padrao_construtivo: 'Padrão construtivo', ano_construcao: 'Ano de construção', observacoes: 'Observações',
+  tipo_logradouro: 'Tipo de logradouro', tp_arquitetonico: 'Tipo arquitetônico', destinacao: 'Destinação', bice: 'BICE', tem_bairro: 'Tem bairro',
+  titular_tipo: 'Tipo de titularidade', titular_doc_tipo: 'Documento de titularidade', titular_dt_aquisicao: 'Data de aquisição',
+  titular_perc: 'Percentual do titular', cnm_ri: 'CNM (matrícula)', cns_ri: 'CNS do cartório',
 };
+export const PADROES = ['popular', 'baixo', 'normal', 'alto', 'luxo'];
 
-const SIMULAR = String(process.env.CIB_SIMULAR_RETORNO || 'false') === 'true';
 const PRAZO_PADRAO = process.env.CIB_PRAZO_SINTER || '2026-12-31';
 const CAPACIDADE_SEMANAL = Number(process.env.CIB_CAPACIDADE_SEMANAL) || 400; // correcoes/semana (estimativa)
-
-// ---- utilitarios -----------------------------------------------------------
-const TZ = 'America/Recife';
-export function competenciaDe(d = new Date()) {
-  const p = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit' }).formatToParts(d);
-  return `${p.find((x) => x.type === 'year').value}-${p.find((x) => x.type === 'month').value}`;
-}
-const muniDe = (req) => String(req.query?.municipio ?? req.body?.municipio ?? '').trim();
-const nomeUsuario = (req) => String(req.user?.nome || req.body?.usuarioNome || 'Equipe').slice(0, 80);
-const num = (v) => {
-  if (v === undefined || v === null || v === '') return null;
-  const n = Number(String(v).replace(/\./g, (m, i, s) => (s.includes(',') ? '' : m)).replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
-};
 
 /** Normaliza um objeto de campos do imovel conforme a whitelist. */
 export function normalizarCampos(src = {}) {
@@ -84,23 +84,28 @@ export function normalizarCampos(src = {}) {
     const v = src[k];
     if (tipo === 'num') out[k] = num(v);
     else if (tipo === 'int') { const n = num(v); out[k] = n == null ? null : Math.round(n); }
+    else if (tipo === 'bool') out[k] = v === '' || v == null ? null : ['true', '1', 'sim', 's', 'yes'].includes(String(v).trim().toLowerCase());
+    else if (tipo === 'data') out[k] = /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : (/^\d{2}\/\d{2}\/\d{4}$/.test(String(v || '').trim()) ? String(v).trim().split('/').reverse().join('-') : null);
     else out[k] = v == null ? '' : String(v).trim().slice(0, 300);
   }
-  if ('tipo' in out) out.tipo = out.tipo === 'territorial' ? 'territorial' : 'predial';
-  if ('contribuinte_doc' in out) out.contribuinte_doc = soDigitos(out.contribuinte_doc);
+  if ('tipo' in out) out.tipo = ['territorial', 'especial'].includes(String(out.tipo).toLowerCase()) ? String(out.tipo).toLowerCase() : 'predial';
+  if ('contribuinte_doc' in out) out.contribuinte_doc = normalizarNi(out.contribuinte_doc);
   if ('cep' in out) out.cep = soDigitos(out.cep);
-  if ('inscricao' in out) out.inscricao = out.inscricao.slice(0, 40);
+  if ('cnm_ri' in out) out.cnm_ri = soDigitos(out.cnm_ri);
+  if ('inscricao' in out) out.inscricao = out.inscricao.slice(0, 45);
+  if ('padrao_construtivo' in out) { const pc = out.padrao_construtivo.toLowerCase(); out.padrao_construtivo = pc === 'medio' || pc === 'médio' ? 'normal' : pc; }
   return out;
 }
 
-const asyncRoute = (fn) => (req, res) => {
-  if (!isConfigured) return res.status(503).json({ error: 'Banco não configurado. Defina DATABASE_URL.' });
-  Promise.resolve(fn(req, res)).catch((err) => {
-    console.error('[cib]', req.method, req.path, err.message);
-    res.status(err.status || 500).json({ error: err.message });
-  });
-};
-const erro = (status, msg) => Object.assign(new Error(msg), { status });
+/** Completa códigos do Sinter dedutíveis com segurança (tipo de logradouro, destinação, bairro). */
+export function completarDerivados(c) {
+  if (c.tipo_logradouro == null && c.logradouro) { const t = tipoLogradouroDoNome(c.logradouro); if (t) c.tipo_logradouro = t; }
+  if (c.destinacao == null && c.uso) { const d = destinacaoDoUso(c.uso); if (d) c.destinacao = d; }
+  if (c.tem_bairro == null && 'bairro' in c) c.tem_bairro = String(c.bairro || '').trim() !== '';
+  return c;
+}
+
+const asyncRoute = rotaAsync('cib');
 
 export async function auditar(db, { municipio = '', entidade, entidadeId = null, acao, detalhe = '', usuario = '' }) {
   try {
@@ -356,22 +361,6 @@ async function salvarConfig(municipio, body) {
   return getConfig(municipio);
 }
 
-// ---- PGV / valor venal -----------------------------------------------------
-async function carregarPgv(db, municipio) {
-  const { rows } = await db.query('SELECT tipo, chave, valor_m2::float AS v FROM pgv_valores WHERE municipio = $1', [municipio]);
-  const terreno = new Map(), construcao = new Map();
-  for (const r of rows) (r.tipo === 'terreno' ? terreno : construcao).set(r.chave.toUpperCase(), r.v);
-  return { terreno, construcao, vazio: rows.length === 0 };
-}
-function calcularValorVenal(im, pgv) {
-  if (!pgv || pgv.vazio) return { t: null, c: null, total: null };
-  const vt = pgv.terreno.get(String(im.bairro || '').toUpperCase()) ?? pgv.terreno.get('*') ?? 0;
-  const vc = pgv.construcao.get(String(im.padrao_construtivo || 'medio').toUpperCase()) ?? pgv.construcao.get('MEDIO') ?? 0;
-  const t = Math.round((Number(im.area_terreno_m2) || 0) * vt * 100) / 100;
-  const c = im.tipo === 'territorial' ? 0 : Math.round((Number(im.area_construida_m2) || 0) * vc * 100) / 100;
-  return { t, c, total: Math.round((t + c) * 100) / 100 };
-}
-
 // ---- revalidacao + status Sinter -------------------------------------------
 /**
  * Revalida imoveis (pendencias + valor venal) e recalcula o status Sinter.
@@ -387,18 +376,21 @@ export async function processarImoveis(db, alvo) {
   );
   if (!rows.length) return 0;
   const pgvPorMuni = new Map();
-  const ids = [], pends = [], erros = [], vt = [], vc = [], vtot = [];
+  const ids = [], pends = [], erros = [], vt = [], vc = [], vtot = [], anos = [];
   for (const im of rows) {
-    if (!pgvPorMuni.has(im.municipio)) pgvPorMuni.set(im.municipio, await carregarPgv(db, im.municipio));
-    const p = im.situacao === 'baixado' ? [] : validarImovel(im);
-    const v = calcularValorVenal(im, pgvPorMuni.get(im.municipio));
-    ids.push(im.id); pends.push(JSON.stringify(p)); erros.push(temErro(p)); vt.push(v.t); vc.push(v.c); vtot.push(v.total);
+    if (!pgvPorMuni.has(im.municipio)) pgvPorMuni.set(im.municipio, await carregarPgvVigente(db, im.municipio));
+    const pgv = pgvPorMuni.get(im.municipio);
+    const v = calcularValorVenal(im, pgv);
+    // O valor venal entra na UI do Sinter (campo opcional): valida com ele.
+    const p = im.situacao === 'baixado' ? [] : validarImovel({ ...im, valor_venal_total: v.total, valor_venal_ano: pgv.ano });
+    ids.push(im.id); pends.push(JSON.stringify(p)); erros.push(temErro(p)); vt.push(v.t); vc.push(v.c); vtot.push(v.total); anos.push(pgv.ano);
   }
   await db.query(
-    `UPDATE imoveis i SET pendencias = u.p::jsonb, tem_erro = u.e, valor_venal_terreno = u.vt, valor_venal_construcao = u.vc, valor_venal_total = u.vtot
-     FROM unnest($1::bigint[], $2::text[], $3::boolean[], $4::numeric[], $5::numeric[], $6::numeric[]) AS u(id, p, e, vt, vc, vtot)
+    `UPDATE imoveis i SET pendencias = u.p::jsonb, tem_erro = u.e, valor_venal_terreno = u.vt, valor_venal_construcao = u.vc,
+       valor_venal_total = u.vtot, valor_venal_ano = u.ano
+     FROM unnest($1::bigint[], $2::text[], $3::boolean[], $4::numeric[], $5::numeric[], $6::numeric[], $7::int[]) AS u(id, p, e, vt, vc, vtot, ano)
      WHERE i.id = u.id`,
-    [ids, pends, erros, vt, vc, vtot]
+    [ids, pends, erros, vt, vc, vtot, anos]
   );
   await recalcularStatus(db, { ids });
   return rows.length;
@@ -412,6 +404,7 @@ export async function recalcularStatus(db, alvo) {
         WHEN EXISTS (SELECT 1 FROM cib_divergencias d WHERE d.imovel_id = i.id AND d.status = 'aberta') THEN 'divergente'
         WHEN i.situacao = 'ativo' AND i.tem_erro THEN 'pendente_correcao'
         WHEN EXISTS (SELECT 1 FROM cib_movimentacoes m WHERE m.imovel_id = i.id AND m.status = 'transmitida') THEN 'enviado'
+        WHEN EXISTS (SELECT 1 FROM cib_movimentacoes m WHERE m.imovel_id = i.id AND m.status = 'rejeitada') THEN 'rejeitado'
         WHEN EXISTS (SELECT 1 FROM cib_movimentacoes m WHERE m.imovel_id = i.id AND m.status IN ('capturada','validada')) THEN 'aguardando_envio'
         WHEN i.cib <> '' THEN 'conciliado'
         WHEN i.situacao = 'baixado' THEN 'baixado'
@@ -434,7 +427,7 @@ async function resolverLote(db, codigo, municipio) {
 }
 
 // ---- mapeamento ------------------------------------------------------------
-function mapImovel(r, { completo = false } = {}) {
+function mapImovel(r, { completo = false, incluirDoc = false } = {}) {
   const o = {
     id: r.id, municipio: r.municipio, inscricao: r.inscricao, loteId: r.lote_id, loteCodigo: r.lote_codigo,
     cib: r.cib, cibAtribuidoEm: r.cib_atribuido_em, situacao: r.situacao, tipo: r.tipo, uso: r.uso,
@@ -444,11 +437,16 @@ function mapImovel(r, { completo = false } = {}) {
     areaTerreno: r.area_terreno_m2, areaConstruida: r.area_construida_m2,
     valorVenal: r.valor_venal_total != null ? Number(r.valor_venal_total) : null,
     pendencias: r.pendencias || [], temErro: r.tem_erro, sinterStatus: r.sinter_status, transmitido: r.transmitido,
-    atualizadoEm: r.updated_at,
+    cibSimulado: Boolean(r.cib_simulado), atualizadoEm: r.updated_at,
   };
   if (completo) {
+    // CPF/CNPJ completo NÃO sai aqui (LGPD): só por POST /api/cib/imoveis/:id/revelar, que registra o acesso.
     Object.assign(o, {
-      contribuinteDoc: r.contribuinte_doc, contribuinteEmail: r.contribuinte_email, contribuinteTelefone: r.contribuinte_telefone,
+      contribuinteEmail: r.contribuinte_email, contribuinteTelefone: r.contribuinte_telefone,
+      tipoLogradouro: r.tipo_logradouro, tpArquitetonico: r.tp_arquitetonico, destinacao: r.destinacao, bice: r.bice, temBairro: r.tem_bairro,
+      titularTipo: r.titular_tipo, titularDocTipo: r.titular_doc_tipo, titularDtAquisicao: isoData(r.titular_dt_aquisicao),
+      titularPerc: r.titular_perc != null ? Number(r.titular_perc) : null, cnmRi: r.cnm_ri, cnsRi: r.cns_ri, valorVenalAno: r.valor_venal_ano,
+      ...(incluirDoc ? { contribuinteDoc: r.contribuinte_doc } : {}),
       matriculaCartorio: r.matricula_cartorio, cartorio: r.cartorio, testada: r.testada_m, nPavimentos: r.n_pavimentos,
       padraoConstrutivo: r.padrao_construtivo, anoConstrucao: r.ano_construcao, observacoes: r.observacoes,
       valorVenalTerreno: r.valor_venal_terreno != null ? Number(r.valor_venal_terreno) : null,
@@ -462,25 +460,27 @@ function mapImovel(r, { completo = false } = {}) {
 function mapMov(m) {
   return {
     id: m.id, municipio: m.municipio, imovelId: m.imovel_id, inscricao: m.inscricao, tipo: m.tipo, origem: m.origem,
-    documentoRef: m.documento_ref, descricao: m.descricao, dadosAntes: m.dados_antes, dadosDepois: m.dados_depois,
+    documentoRef: m.documento_ref, descricao: m.descricao, dadosAntes: mascararCampos(m.dados_antes, mascararDoc), dadosDepois: mascararCampos(m.dados_depois, mascararDoc),
     status: m.status, erros: m.erros || [], retornoMsg: m.retorno_msg, remessaId: m.remessa_id, remessaNumero: m.remessa_numero ?? null,
+    desativacaoTipo: m.desativacao_tipo, desativacaoMotivo: m.desativacao_motivo, falhasSinter: m.falhas_sinter || [], tentativas: m.tentativas || 0,
     competencia: m.competencia, criadoPorNome: m.criado_por_nome, validadoEm: m.validado_em, transmitidoEm: m.transmitido_em,
     conciliadoEm: m.conciliado_em, criadoEm: m.created_at,
   };
 }
 
 /** Imovel completo (com centroide do lote) — usado pela ficha e pelos documentos. */
-export async function getImovelCompleto(id) {
+/** `incluirDoc` só para uso interno (emissão de documento oficial). Nunca devolva isso direto numa rota. */
+export async function getImovelCompleto(id, { incluirDoc = false } = {}) {
   const { rows } = await query(
     `SELECT i.*, l.area_m2 AS lote_area_m2, ST_Y(ST_PointOnSurface(l.geom)) AS lat, ST_X(ST_PointOnSurface(l.geom)) AS lng
      FROM imoveis i LEFT JOIN lotes l ON l.id = i.lote_id WHERE i.id = $1`, [id]
   );
-  return rows[0] ? mapImovel(rows[0], { completo: true }) : null;
+  return rows[0] ? mapImovel(rows[0], { completo: true, incluirDoc }) : null;
 }
 
-export async function buscarImovelPorInscricao(municipio, inscricao) {
+export async function buscarImovelPorInscricao(municipio, inscricao, opts = {}) {
   const { rows } = await query('SELECT id FROM imoveis WHERE municipio = $1 AND inscricao = $2', [municipio, String(inscricao || '').trim()]);
-  return rows[0] ? getImovelCompleto(rows[0].id) : null;
+  return rows[0] ? getImovelCompleto(rows[0].id, opts) : null;
 }
 
 // ---- movimentacoes ---------------------------------------------------------
@@ -503,20 +503,28 @@ export async function capturarMovimentacao(db, m) {
   if (m.tipo !== 'inclusao' && !imovelId) throw erro(404, `Inscrição ${m.inscricao || ''} não encontrada no cadastro.`);
   if (m.tipo === 'inclusao' && imovelId) throw erro(409, `A inscrição ${m.inscricao} já existe no cadastro — use uma alteração.`);
   const depois = normalizarCampos(m.dadosDepois || {});
+  let desTipo = null, desMotivo = null;
+  if (m.tipo === 'baixa') {
+    desMotivo = Number(m.desativacaoMotivo) || null;
+    const mot = MOTIVO_DESATIVACAO[String(desMotivo)];
+    if (!mot) throw erro(400, 'Informe o motivo da baixa conforme a tabela do Sinter (desmembramento, remembramento, duplicidade, inscrição indevida…).');
+    desTipo = Number(m.desativacaoTipo) || mot.tipos[0];
+    if (!mot.tipos.includes(desTipo)) throw erro(400, `O motivo "${mot.descricao}" não aceita esse tipo de desativação.`);
+  }
   if (imovelId) {
     const r = await db.query('SELECT * FROM imoveis WHERE id = $1', [imovelId]);
     const atual = r.rows[0];
     for (const k of Object.keys(depois)) antes[k] = atual[k];
     if (m.dadosAntes) antes = { ...antes, ...m.dadosAntes };
   }
-  if (m.tipo === 'inclusao') depois.inscricao = depois.inscricao || String(m.inscricao || '').trim();
+  if (m.tipo === 'inclusao') { depois.inscricao = depois.inscricao || String(m.inscricao || '').trim(); completarDerivados(depois); }
   const { rows } = await db.query(
     `INSERT INTO cib_movimentacoes (municipio, imovel_id, inscricao, tipo, origem, documento_ref, descricao, dados_antes, dados_depois,
-       status, competencia, criado_por_nome)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12) RETURNING *`,
+       status, competencia, criado_por_nome, desativacao_tipo, desativacao_motivo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14) RETURNING *`,
     [m.municipio, imovelId, String(m.inscricao || depois.inscricao || '').trim(), m.tipo, origem, String(m.documentoRef || '').slice(0, 80),
       String(m.descricao || '').slice(0, 1000), JSON.stringify(antes), JSON.stringify(depois), m.status || 'capturada',
-      m.competencia || competenciaDe(), m.usuario || '']
+      m.competencia || competenciaDe(), m.usuario || '', desTipo, desMotivo]
   );
   if (imovelId) await recalcularStatus(db, { ids: [imovelId] });
   await auditar(db, { municipio: m.municipio, entidade: 'movimentacao', entidadeId: rows[0].id, acao: 'capturar',
@@ -536,6 +544,21 @@ export async function validarMovimentacao(db, id, usuario = '') {
   let atual = null;
   if (m.imovel_id) atual = (await db.query('SELECT i.*, l.area_m2 AS lote_area_m2 FROM imoveis i LEFT JOIN lotes l ON l.id = i.lote_id WHERE i.id = $1', [m.imovel_id])).rows[0];
   if (m.tipo !== 'inclusao' && !atual) throw erro(404, 'Imóvel da movimentação não existe mais.');
+
+  // Já aplicada no cadastro antes (voltou da remessa por falha de leiaute ou foi
+  // rejeitada pelo Sinter): não reaplica — só confere o estado atual e devolve à fila.
+  if (m.validado_em && m.imovel_id) {
+    const pend = ['inclusao', 'alteracao'].includes(m.tipo) && atual ? validarImovel(atual).filter((p) => p.nivel === 'erro') : [];
+    if (pend.length) {
+      const r = await db.query(`UPDATE cib_movimentacoes SET erros = $1::jsonb, updated_at = NOW() WHERE id = $2 RETURNING *`, [JSON.stringify(pend), id]);
+      return { ok: false, mov: r.rows[0], erros: pend };
+    }
+    const r = await db.query(`UPDATE cib_movimentacoes SET status = $2, erros = '[]'::jsonb, remessa_id = NULL, updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [id, m.tipo === 'reativacao' ? 'nao_transmissivel' : 'validada']);
+    await processarImoveis(db, { ids: [m.imovel_id] });
+    await auditar(db, { municipio: m.municipio, entidade: 'movimentacao', entidadeId: id, acao: 'revalidar', detalhe: `${m.tipo} ${m.inscricao} de volta à fila de transmissão`, usuario });
+    return { ok: true, mov: r.rows[0], erros: [] };
+  }
 
   let errosVal = [];
   if (m.tipo === 'inclusao' || m.tipo === 'alteracao') {
@@ -578,141 +601,25 @@ export async function validarMovimentacao(db, id, usuario = '') {
   } else if (m.tipo === 'reativacao') {
     await db.query(`UPDATE imoveis SET situacao = 'ativo', data_baixa = NULL, motivo_baixa = '', updated_at = NOW() WHERE id = $1`, [imovelId]);
   }
+  // A API do Sinter (manual 1.17) só tem Inclusão, Alteração e Desativação: a
+  // reativação vale no cadastro municipal, mas não tem como ser transmitida.
+  // Se o imóvel já tinha CIB, abre uma divergência para tratar com o suporte do Sinter.
+  const naoTransmissivel = m.tipo === 'reativacao';
   const r = await db.query(
-    `UPDATE cib_movimentacoes SET status = 'validada', erros = '[]'::jsonb, imovel_id = $2, remessa_id = NULL, validado_em = NOW(), updated_at = NOW()
-     WHERE id = $1 RETURNING *`, [id, imovelId]
+    `UPDATE cib_movimentacoes SET status = $3, erros = '[]'::jsonb, imovel_id = $2, remessa_id = NULL, validado_em = NOW(), updated_at = NOW(),
+       retorno_msg = CASE WHEN $3 = 'nao_transmissivel' THEN 'Sem operação de reativação na API do Sinter (manual 1.17).' ELSE retorno_msg END
+     WHERE id = $1 RETURNING *`, [id, imovelId, naoTransmissivel ? 'nao_transmissivel' : 'validada']
   );
+  if (naoTransmissivel && atual?.cib) {
+    await db.query(
+      `INSERT INTO cib_divergencias (municipio, imovel_id, movimentacao_id, fonte, campo, valor_municipio, valor_externo, mensagem)
+       VALUES ($1,$2,$3,'sinter','situacao','ativo','desativada',$4) ON CONFLICT DO NOTHING`,
+      [m.municipio, imovelId, id, 'Inscrição reativada no município; a API do Sinter não tem operação de reativação. Solicite ao suporte do Sinter ou registre nova inclusão.']
+    );
+  }
   await processarImoveis(db, { ids: [imovelId] });
   await auditar(db, { municipio: m.municipio, entidade: 'movimentacao', entidadeId: id, acao: 'validar', detalhe: `${m.tipo} ${m.inscricao} aplicada no cadastro`, usuario });
   return { ok: true, mov: r.rows[0], erros: [] };
-}
-
-// ---- remessas (Transmitir) -------------------------------------------------
-/** Item no layout de transmissao. Ajuste aqui para o layout oficial do Manual Operacional do Sinter. */
-function itemSinter(mov, im) {
-  const base = im || mov.dados_depois || {};
-  return {
-    operacao: { inclusao: 'I', alteracao: 'A', baixa: 'B', reativacao: 'R' }[mov.tipo],
-    tipo_movimentacao: mov.tipo,
-    inscricao_municipal: mov.inscricao,
-    cib: base.cib || '',
-    situacao: base.situacao || 'ativo',
-    tipo_imovel: base.tipo || '',
-    uso: base.uso || '',
-    endereco: { logradouro: base.logradouro || '', numero: base.numero || '', complemento: base.complemento || '', bairro: base.bairro || '', cep: base.cep || '' },
-    area_terreno_m2: base.area_terreno_m2 ?? null,
-    area_construida_m2: base.area_construida_m2 ?? null,
-    matricula: base.matricula_cartorio || '',
-    cartorio: base.cartorio || '',
-    contribuinte: { nome: base.contribuinte_nome || '', cpf_cnpj: base.contribuinte_doc || '' },
-    geometria_ref: base.lote_codigo || '',
-    origem_evento: mov.origem,
-    documento_origem: mov.documento_ref || '',
-    data_evento: mov.validado_em || mov.created_at,
-  };
-}
-
-async function montarArquivoRemessa(remessaId) {
-  const rem = (await query('SELECT * FROM cib_remessas WHERE id = $1', [remessaId])).rows[0];
-  if (!rem) throw erro(404, 'Remessa não encontrada.');
-  const { rows } = await query(
-    `SELECT m.*, row_to_json(i.*) AS im FROM cib_movimentacoes m LEFT JOIN imoveis i ON i.id = m.imovel_id
-     WHERE m.remessa_id = $1 ORDER BY m.id`, [remessaId]
-  );
-  const cfg = await getConfig(rem.municipio);
-  const itens = rows.map((r) => itemSinter(r, r.im));
-  return {
-    rem, cfg,
-    arquivo: {
-      layout: 'BzR-Sinter/1.0',
-      municipio: { nome: rem.municipio || cfg.nomeOficial, codigo_ibge: cfg.codigoIbge, cnpj: cfg.cnpj, uf: cfg.uf },
-      remessa: { numero: rem.numero, competencia: rem.competencia, gerada_em: rem.created_at, quantidade: itens.length },
-      itens,
-    },
-  };
-}
-
-function csvRemessa(arquivo) {
-  const cols = ['operacao', 'inscricao_municipal', 'cib', 'situacao', 'tipo_imovel', 'uso', 'logradouro', 'numero', 'complemento', 'bairro', 'cep',
-    'area_terreno_m2', 'area_construida_m2', 'matricula', 'cartorio', 'contribuinte_nome', 'contribuinte_cpf_cnpj', 'geometria_ref', 'origem_evento', 'documento_origem'];
-  const q = (v) => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const linhas = arquivo.itens.map((it) => [it.operacao, it.inscricao_municipal, it.cib, it.situacao, it.tipo_imovel, it.uso, it.endereco.logradouro,
-    it.endereco.numero, it.endereco.complemento, it.endereco.bairro, it.endereco.cep, it.area_terreno_m2, it.area_construida_m2, it.matricula,
-    it.cartorio, it.contribuinte.nome, it.contribuinte.cpf_cnpj, it.geometria_ref, it.origem_evento, it.documento_origem].map(q).join(';'));
-  return '﻿' + [cols.join(';'), ...linhas].join('\r\n');
-}
-
-/** Gera um CIB ficticio (somente demonstracao): 7 caracteres + digito. */
-function cibSimulado(seed) {
-  const h = crypto.createHash('sha1').update(String(seed)).digest('hex').toUpperCase();
-  const alfa = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let s = '';
-  for (let i = 0; i < 7; i++) s += alfa[parseInt(h.slice(i * 2, i * 2 + 2), 16) % alfa.length];
-  const dv = s.split('').reduce((a, c, i) => a + c.charCodeAt(0) * (i + 2), 0) % 10;
-  return `${s}-${dv}`;
-}
-
-/** Processa o retorno do Sinter para uma remessa (Conciliar). */
-export async function processarRetorno(db, remessaId, itens, usuario = '') {
-  const rem = (await db.query('SELECT * FROM cib_remessas WHERE id = $1 FOR UPDATE', [remessaId])).rows[0];
-  if (!rem) throw erro(404, 'Remessa não encontrada.');
-  if (!['enviada', 'processada_com_erros', 'parcial'].includes(rem.status)) throw erro(409, 'Só é possível processar retorno de remessa enviada.');
-  const movs = (await db.query(`SELECT * FROM cib_movimentacoes WHERE remessa_id = $1`, [remessaId])).rows;
-  const porInsc = new Map();
-  for (const m of movs) { if (!porInsc.has(m.inscricao)) porInsc.set(m.inscricao, []); porInsc.get(m.inscricao).push(m); }
-  let ok = 0, div = 0, err = 0, ignorados = 0;
-  const tocados = new Set();
-  for (const it of itens || []) {
-    const lista = porInsc.get(String(it.inscricao || '').trim());
-    if (!lista) { ignorados += 1; continue; }
-    const situacao = String(it.situacao || it.status || 'ok').toLowerCase();
-    for (const m of lista) {
-      if (!['transmitida', 'divergente', 'rejeitada'].includes(m.status)) continue;
-      if (m.imovel_id) tocados.add(m.imovel_id);
-      if (situacao === 'ok' || situacao === 'aceito' || situacao === 'processado') {
-        await db.query(`UPDATE cib_movimentacoes SET status = 'conciliada', conciliado_em = NOW(), retorno_msg = $2, updated_at = NOW() WHERE id = $1`,
-          [m.id, String(it.mensagem || 'Processado pelo Sinter').slice(0, 500)]);
-        const cib = String(it.cib || '').trim().toUpperCase();
-        if (m.imovel_id) {
-          await db.query(
-            `UPDATE imoveis SET transmitido = TRUE, cib = CASE WHEN $2 <> '' THEN $2 ELSE cib END,
-               cib_atribuido_em = CASE WHEN $2 <> '' AND cib = '' THEN NOW() ELSE cib_atribuido_em END, updated_at = NOW() WHERE id = $1`,
-            [m.imovel_id, cib]
-          );
-        }
-        ok += 1;
-      } else if (situacao === 'divergente' || situacao === 'divergencia') {
-        await db.query(`UPDATE cib_movimentacoes SET status = 'divergente', retorno_msg = $2, updated_at = NOW() WHERE id = $1`,
-          [m.id, String(it.mensagem || 'Divergência apontada pelo Sinter').slice(0, 500)]);
-        if (m.imovel_id) {
-          await db.query(`UPDATE imoveis SET transmitido = TRUE, cib = CASE WHEN $2 <> '' AND cib = '' THEN $2 ELSE cib END WHERE id = $1`,
-            [m.imovel_id, String(it.cib || '').trim().toUpperCase()]);
-          await db.query(
-            `INSERT INTO cib_divergencias (municipio, imovel_id, movimentacao_id, remessa_id, fonte, campo, valor_municipio, valor_externo, mensagem)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [rem.municipio, m.imovel_id, m.id, remessaId, String(it.fonte || 'sinter').slice(0, 20), String(it.campo || '').slice(0, 60),
-              String(it.valorMunicipio ?? it.valor_municipio ?? '').slice(0, 300), String(it.valorExterno ?? it.valor_sinter ?? it.valorSinter ?? '').slice(0, 300),
-              String(it.mensagem || '').slice(0, 500)]
-          );
-        }
-        div += 1;
-      } else {
-        await db.query(`UPDATE cib_movimentacoes SET status = 'rejeitada', retorno_msg = $2, updated_at = NOW() WHERE id = $1`,
-          [m.id, String(it.mensagem || 'Rejeitado pelo Sinter').slice(0, 500)]);
-        err += 1;
-      }
-    }
-  }
-  const pendentes = (await db.query(`SELECT COUNT(*)::int AS n FROM cib_movimentacoes WHERE remessa_id = $1 AND status = 'transmitida'`, [remessaId])).rows[0].n;
-  const status = pendentes > 0 ? 'parcial' : (err > 0 ? 'processada_com_erros' : 'processada');
-  await db.query(
-    `UPDATE cib_remessas SET status = $2, qtd_ok = qtd_ok + $3, qtd_divergente = qtd_divergente + $4, qtd_erro = $5, processada_em = NOW() WHERE id = $1`,
-    [remessaId, status, ok, div, err]
-  );
-  if (tocados.size) await recalcularStatus(db, { ids: [...tocados] });
-  await auditar(db, { municipio: rem.municipio, entidade: 'remessa', entidadeId: remessaId, acao: 'retorno',
-    detalhe: `Remessa ${rem.numero}: ${ok} ok, ${div} divergentes, ${err} rejeitadas, ${ignorados} ignoradas`, usuario });
-  return { ok, divergentes: div, rejeitadas: err, ignorados, status };
 }
 
 // ---- diagnostico (Fase 1, etapa 1) ----------------------------------------
@@ -944,6 +851,67 @@ export async function detectarDiferencas(municipio, { minArea = 20, tolerancia =
   return { analisados: rows.length, diferencas: achados.length, novas };
 }
 
+/**
+ * Aplica mudanças em um imóvel existente (edição na tela ou importação do
+ * sistema tributário). Se o imóvel já é conhecido do Sinter, a mudança vira (ou
+ * se junta a) uma movimentação de alteração na fila de transmissão.
+ * Devolve { mudou, antes, movId } — mudou vazio = nada a fazer (idempotente).
+ */
+export async function aplicarAlteracao(db, atual, campos, { origem = 'manual', descricao = 'Atualização cadastral', usuario = '', documentoRef = '' } = {}) {
+  const mudou = {};
+  for (const [k, v] of Object.entries(campos)) {
+    if (k === 'cib') continue;
+    if (!igualCampo(atual[k], v, CAMPOS_IMOVEL[k])) mudou[k] = v;
+  }
+  if (!Object.keys(mudou).length) return { mudou, antes: {}, movId: null };
+  const antes = Object.fromEntries(Object.keys(mudou).map((k) => [k, atual[k] instanceof Date ? isoData(atual[k]) : atual[k]]));
+  const cols = Object.keys(mudou);
+  await db.query(`UPDATE imoveis SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(', ')}, updated_at = NOW() WHERE id = $1`, [atual.id, ...cols.map((c) => mudou[c])]);
+  if ('lote_codigo' in mudou) {
+    const loteId = await resolverLote(db, mudou.lote_codigo, atual.municipio);
+    await db.query('UPDATE imoveis SET lote_id = $2 WHERE id = $1', [atual.id, loteId]);
+  }
+  let movId = null;
+  if (atual.transmitido || atual.cib) {
+    const aberta = (await db.query(
+      `SELECT * FROM cib_movimentacoes WHERE imovel_id = $1 AND tipo = 'alteracao' AND status IN ('capturada','validada') AND remessa_id IS NULL ORDER BY id DESC LIMIT 1`, [atual.id]
+    )).rows[0];
+    if (aberta) {
+      await db.query(`UPDATE cib_movimentacoes SET dados_depois = dados_depois || $2::jsonb, dados_antes = $3::jsonb || dados_antes, updated_at = NOW() WHERE id = $1`,
+        [aberta.id, JSON.stringify(mudou), JSON.stringify(antes)]);
+      movId = aberta.id;
+    } else {
+      const r = await db.query(
+        `INSERT INTO cib_movimentacoes (municipio, imovel_id, inscricao, tipo, origem, documento_ref, descricao, dados_antes, dados_depois, status, validado_em, competencia, criado_por_nome)
+         VALUES ($1,$2,$3,'alteracao',$4,$5,$6,$7::jsonb,$8::jsonb,'validada',NOW(),$9,$10) RETURNING id`,
+        [atual.municipio, atual.id, mudou.inscricao || atual.inscricao, ORIGENS.includes(origem) ? origem : 'manual', String(documentoRef || '').slice(0, 80),
+          String(descricao).slice(0, 500), JSON.stringify(antes), JSON.stringify(mudou), competenciaDe(), usuario]
+      );
+      movId = r.rows[0].id;
+    }
+  }
+  await processarImoveis(db, { ids: [atual.id] });
+  const im = (await db.query('SELECT tem_erro FROM imoveis WHERE id = $1', [atual.id])).rows[0];
+  if (movId && im.tem_erro) {
+    await db.query(`UPDATE cib_movimentacoes SET status = 'capturada', validado_em = NULL WHERE id = $1 AND status = 'validada'`, [movId]);
+    await recalcularStatus(db, { ids: [atual.id] });
+  }
+  const mascarar = (k, v) => (k === 'contribuinte_doc' ? mascararDoc(v) : v);
+  await auditar(db, { municipio: atual.municipio, entidade: 'imovel', entidadeId: atual.id, acao: origem === 'sistema_tributario' ? 'importar' : 'editar',
+    detalhe: Object.keys(mudou).map((k) => `${ROTULOS[k] || k}: "${mascarar(k, antes[k]) ?? ''}" → "${mascarar(k, mudou[k]) ?? ''}"`).join('; '), usuario });
+  return { mudou, antes, movId };
+}
+
+/** Compara valor do banco com valor normalizado (números com tolerância, vazio = nulo, datas ISO). */
+export function igualCampo(a, v, tipo) {
+  const vazioA = a == null || a === '', vazioV = v == null || v === '';
+  if (vazioA || vazioV) return vazioA && vazioV;
+  if (tipo === 'num' || tipo === 'int') return Math.abs(Number(a) - Number(v)) < 0.0001;
+  if (tipo === 'bool') return Boolean(a) === Boolean(v);
+  if (tipo === 'data') return isoData(a) === isoData(v);
+  return String(a).trim() === String(v).trim();
+}
+
 // ===========================================================================
 // Rotas
 // ===========================================================================
@@ -953,6 +921,7 @@ cibRouter.use('/api/cib', requireAuth);
 
 // -- municipios e configuracao
 cibRouter.get('/api/cib/municipios', asyncRoute(async (req, res) => {
+  if (MUNICIPIO_FIXO) return res.json([MUNICIPIO_FIXO]); // um deploy por prefeitura
   const { rows } = await query(
     `SELECT m AS municipio FROM (
        SELECT municipio AS m FROM municipio_config UNION SELECT DISTINCT municipio FROM imoveis
@@ -960,7 +929,7 @@ cibRouter.get('/api/cib/municipios', asyncRoute(async (req, res) => {
   );
   res.json(rows.map((r) => r.municipio));
 }));
-cibRouter.get('/api/cib/config', asyncRoute(async (req, res) => res.json({ ...(await getConfig(muniDe(req))), simulacao: SIMULAR })));
+cibRouter.get('/api/cib/config', asyncRoute(async (req, res) => res.json({ ...(await getConfig(muniDe(req))), simulacao: SIMULACAO_SINTER, municipioFixo: Boolean(MUNICIPIO_FIXO) })));
 cibRouter.put('/api/cib/config', gestor, asyncRoute(async (req, res) => {
   const m = muniDe(req);
   const cfg = await salvarConfig(m, req.body || {});
@@ -1005,11 +974,11 @@ cibRouter.get('/api/cib/imoveis', asyncRoute(async (req, res) => {
   if (req.query.semCib === '1') where.push(`i.cib = '' AND i.situacao = 'ativo'`);
   if (req.query.q) {
     const q = '%' + String(req.query.q).replace(/[%_]/g, '') + '%';
-    const qd = soDigitos(req.query.q);
+    const qd = normalizarNi(req.query.q);
     params.push(q);
     const p = '$' + params.length;
     let cond = `(i.inscricao ILIKE ${p} OR i.cib ILIKE ${p} OR i.logradouro ILIKE ${p} OR i.contribuinte_nome ILIKE ${p} OR i.lote_codigo ILIKE ${p}`;
-    if (qd.length >= 11) { params.push(qd); cond += ` OR i.contribuinte_doc = $${params.length}`; }
+    if (qd.length === 11 || qd.length === 14) { params.push(qd); cond += ` OR i.contribuinte_doc = $${params.length}`; }
     where.push(cond + ')');
   }
   const limit = Math.min(200, Number(req.query.limit) || 50);
@@ -1033,9 +1002,21 @@ cibRouter.get('/api/cib/imoveis/:id', asyncRoute(async (req, res) => {
   res.json({ ...im, movimentacoes: movs, divergencias: divs, documentos: docs, bcis });
 }));
 
+// LGPD: o CPF/CNPJ completo só sai por aqui, com finalidade, e o acesso fica registrado.
+cibRouter.post('/api/cib/imoveis/:id/revelar', asyncRoute(async (req, res) => {
+  if (req.user?.role && req.user.role !== 'anon' && !PERFIS_DADOS_PESSOAIS.includes(req.user.role)) throw erro(403, 'Seu perfil não acessa dados pessoais completos.');
+  const finalidade = String(req.body?.finalidade || '').trim();
+  if (finalidade.length < 3) throw erro(400, 'Informe a finalidade do acesso ao dado pessoal.');
+  const r = (await query('SELECT id, municipio, contribuinte_doc FROM imoveis WHERE id = $1', [req.params.id])).rows[0];
+  if (!r || r.municipio !== muniDe(req)) throw erro(404, 'Imóvel não encontrado.');
+  await registrarAcesso(req, { municipio: r.municipio, entidade: 'imovel', entidadeId: r.id, dado: 'CPF/CNPJ do contribuinte', finalidade });
+  res.json({ contribuinteDoc: r.contribuinte_doc });
+}));
+
 cibRouter.post('/api/cib/imoveis', asyncRoute(async (req, res) => {
   const m = muniDe(req);
-  const campos = normalizarCampos(req.body || {});
+  const campos = completarDerivados(normalizarCampos(req.body || {}));
+  delete campos.cib;
   if (!campos.inscricao) throw erro(400, 'Informe a inscrição imobiliária.');
   const result = await withTransaction(async (db) => {
     const ja = await db.query('SELECT id FROM imoveis WHERE municipio = $1 AND inscricao = $2', [m, campos.inscricao]);
@@ -1066,57 +1047,17 @@ cibRouter.put('/api/cib/imoveis/:id', asyncRoute(async (req, res) => {
   const id = Number(req.params.id);
   const campos = normalizarCampos(req.body || {});
   delete campos.cib; // CIB vem do Sinter (retorno) — ver PATCH /cib
+  // CPF/CNPJ só é alterado se enviado explicitamente (a ficha mostra mascarado).
+  if (!campos.contribuinte_doc) delete campos.contribuinte_doc;
   const out = await withTransaction(async (db) => {
     const atual = (await db.query('SELECT * FROM imoveis WHERE id = $1 FOR UPDATE', [id])).rows[0];
-    if (!atual) throw erro(404, 'Imóvel não encontrado.');
+    if (!atual || atual.municipio !== muniDe(req)) throw erro(404, 'Imóvel não encontrado.');
     if (campos.inscricao && campos.inscricao !== atual.inscricao) {
       const ja = await db.query('SELECT 1 FROM imoveis WHERE municipio = $1 AND inscricao = $2 AND id <> $3', [atual.municipio, campos.inscricao, id]);
       if (ja.rows.length) throw erro(409, 'Já existe outro imóvel com esta inscrição.');
     }
-    const mudou = {};
-    for (const [k, v] of Object.entries(campos)) {
-      const a = atual[k];
-      const igual = (a == null && (v == null || v === '')) || String(a ?? '') === String(v ?? '') || (typeof a === 'number' && Number(v) === a);
-      if (!igual) mudou[k] = v;
-    }
-    if (!Object.keys(mudou).length) return { id, mov: null };
-    const antes = Object.fromEntries(Object.keys(mudou).map((k) => [k, atual[k]]));
-    const cols = Object.keys(mudou);
-    const sets = cols.map((c, i) => `${c} = $${i + 2}`);
-    await db.query(`UPDATE imoveis SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1`, [id, ...cols.map((c) => mudou[c])]);
-    if ('lote_codigo' in mudou) {
-      const loteId = await resolverLote(db, mudou.lote_codigo, atual.municipio);
-      await db.query('UPDATE imoveis SET lote_id = $2 WHERE id = $1', [id, loteId]);
-    }
-    let movId = null;
-    // Imovel ja conhecido do Sinter: a alteracao precisa ser transmitida.
-    if (atual.transmitido || atual.cib) {
-      const aberta = (await db.query(
-        `SELECT * FROM cib_movimentacoes WHERE imovel_id = $1 AND tipo = 'alteracao' AND status IN ('capturada','validada') AND remessa_id IS NULL ORDER BY id DESC LIMIT 1`, [id]
-      )).rows[0];
-      if (aberta) {
-        await db.query(`UPDATE cib_movimentacoes SET dados_depois = dados_depois || $2::jsonb, dados_antes = $3::jsonb || dados_antes, updated_at = NOW() WHERE id = $1`,
-          [aberta.id, JSON.stringify(mudou), JSON.stringify(antes)]);
-        movId = aberta.id;
-      } else {
-        const r = await db.query(
-          `INSERT INTO cib_movimentacoes (municipio, imovel_id, inscricao, tipo, origem, descricao, dados_antes, dados_depois, status, validado_em, competencia, criado_por_nome)
-           VALUES ($1,$2,$3,'alteracao','manual',$4,$5::jsonb,$6::jsonb,'validada',NOW(),$7,$8) RETURNING id`,
-          [atual.municipio, id, mudou.inscricao || atual.inscricao, String(req.body.descricao || 'Atualização cadastral').slice(0, 500),
-            JSON.stringify(antes), JSON.stringify(mudou), competenciaDe(), nomeUsuario(req)]
-        );
-        movId = r.rows[0].id;
-      }
-    }
-    await processarImoveis(db, { ids: [id] });
-    const im = (await db.query('SELECT tem_erro FROM imoveis WHERE id = $1', [id])).rows[0];
-    if (movId && im.tem_erro) {
-      await db.query(`UPDATE cib_movimentacoes SET status = 'capturada', validado_em = NULL WHERE id = $1 AND status = 'validada'`, [movId]);
-      await recalcularStatus(db, { ids: [id] });
-    }
-    await auditar(db, { municipio: atual.municipio, entidade: 'imovel', entidadeId: id, acao: 'editar',
-      detalhe: Object.keys(mudou).map((k) => `${ROTULOS[k] || k}: "${antes[k] ?? ''}" → "${mudou[k] ?? ''}"`).join('; '), usuario: nomeUsuario(req) });
-    return { id, mov: movId };
+    const r = await aplicarAlteracao(db, atual, campos, { origem: 'manual', descricao: req.body.descricao || 'Atualização cadastral', usuario: nomeUsuario(req) });
+    return { id, mov: r.movId };
   });
   res.json({ ...(await getImovelCompleto(out.id)), movimentacaoId: out.mov });
 }));
@@ -1127,7 +1068,9 @@ for (const [rota, tipo] of [['baixa', 'baixa'], ['reativar', 'reativacao']]) {
     const out = await withTransaction(async (db) => {
       const im = (await db.query('SELECT * FROM imoveis WHERE id = $1', [req.params.id])).rows[0];
       if (!im) throw erro(404, 'Imóvel não encontrado.');
+      if (im.municipio !== muniDe(req)) throw erro(404, 'Imóvel não encontrado.');
       const mov = await capturarMovimentacao(db, { municipio: im.municipio, imovelId: im.id, inscricao: im.inscricao, tipo,
+        desativacaoMotivo: req.body?.desativacaoMotivo, desativacaoTipo: req.body?.desativacaoTipo,
         origem: ORIGENS.includes(req.body?.origem) ? req.body.origem : 'manual', documentoRef: req.body?.documentoRef,
         descricao: req.body?.motivo || (tipo === 'baixa' ? 'Baixa de inscrição' : 'Reativação de inscrição'), usuario: nomeUsuario(req) });
       const v = await validarMovimentacao(db, mov.id, nomeUsuario(req));
@@ -1137,37 +1080,6 @@ for (const [rota, tipo] of [['baixa', 'baixa'], ['reativar', 'reativacao']]) {
     res.json(await getImovelCompleto(out));
   }));
 }
-
-// Importacao da base cadastral (CSV processado no front) — upsert por inscricao.
-cibRouter.post('/api/cib/imoveis/importar', gestor, asyncRoute(async (req, res) => {
-  const m = muniDe(req);
-  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
-  if (!itens.length) throw erro(400, 'Envie { itens: [...] }.');
-  if (itens.length > 2000) throw erro(400, 'Máximo de 2000 imóveis por requisição (envie em lotes).');
-  const out = await withTransaction(async (db) => {
-    let inseridos = 0, atualizados = 0, ignorados = 0;
-    const ids = [];
-    for (const raw of itens) {
-      const c = normalizarCampos(raw);
-      delete c.cib;
-      if (!c.inscricao) { ignorados += 1; continue; }
-      const loteId = await resolverLote(db, c.lote_codigo || c.inscricao, m);
-      const cols = Object.keys(c);
-      const r = await db.query(
-        `INSERT INTO imoveis (municipio, lote_id, ${cols.join(', ')}) VALUES ($1,$2, ${cols.map((_, i) => '$' + (i + 3)).join(', ')})
-         ON CONFLICT (municipio, inscricao) DO UPDATE SET ${cols.filter((k) => k !== 'inscricao').map((k) => `${k} = EXCLUDED.${k}`).concat(['lote_id = COALESCE(EXCLUDED.lote_id, imoveis.lote_id)', 'updated_at = NOW()']).join(', ')}
-         RETURNING id, (xmax = 0) AS novo`,
-        [m, loteId, ...cols.map((k) => c[k])]
-      );
-      ids.push(r.rows[0].id);
-      if (r.rows[0].novo) inseridos += 1; else atualizados += 1;
-    }
-    await processarImoveis(db, { ids });
-    await auditar(db, { municipio: m, entidade: 'imovel', acao: 'importar', detalhe: `${inseridos} inseridos, ${atualizados} atualizados, ${ignorados} ignorados`, usuario: nomeUsuario(req) });
-    return { inseridos, atualizados, ignorados };
-  });
-  res.json({ ok: true, ...out });
-}));
 
 cibRouter.post('/api/cib/revalidar', asyncRoute(async (req, res) => {
   const m = muniDe(req);
@@ -1212,6 +1124,7 @@ cibRouter.post('/api/cib/movimentacoes', asyncRoute(async (req, res) => {
   const b = req.body || {};
   const mov = await withTransaction((db) => capturarMovimentacao(db, {
     municipio: muniDe(req), tipo: b.tipo, origem: b.origem, inscricao: b.inscricao, documentoRef: b.documentoRef,
+    desativacaoMotivo: b.desativacaoMotivo, desativacaoTipo: b.desativacaoTipo,
     descricao: b.descricao, dadosDepois: b.dadosDepois, usuario: nomeUsuario(req),
   }));
   res.json(mapMov(mov));
@@ -1234,6 +1147,7 @@ cibRouter.post('/api/cib/movimentacoes/parcelamento', asyncRoute(async (req, res
       if (!im) throw erro(404, `Inscrição de origem ${insc} não encontrada.`);
       modelo = modelo || im;
       criadas.push(await capturarMovimentacao(db, { municipio: m, imovelId: im.id, inscricao: insc, tipo: 'baixa', origem: 'parcelamento',
+        desativacaoMotivo: { desmembramento: 1, desdobro: 1, remembramento: 2, loteamento: 4 }[tipoParc], desativacaoTipo: 1,
         documentoRef: b.documentoRef, descricao: `Baixa por ${tipoParc}`, usuario: nomeUsuario(req) }));
     }
     for (const n of novas) {
@@ -1311,177 +1225,11 @@ cibRouter.post('/api/cib/movimentacoes/:id/descartar', asyncRoute(async (req, re
   res.json(mapMov(rows[0]));
 }));
 
-// Reenvio de uma rejeitada: volta para a fila de transmissao (sem remessa).
-cibRouter.post('/api/cib/movimentacoes/:id/reenviar', asyncRoute(async (req, res) => {
-  const { rows } = await query(
-    `UPDATE cib_movimentacoes SET status = 'validada', remessa_id = NULL, updated_at = NOW()
-     WHERE id = $1 AND status = 'rejeitada' RETURNING *`, [req.params.id]
-  );
-  if (!rows[0]) throw erro(409, 'Só é possível reenviar movimentação rejeitada.');
-  if (rows[0].imovel_id) await recalcularStatus(null, { ids: [rows[0].imovel_id] });
-  res.json(mapMov(rows[0]));
-}));
-
-// -- remessas (Transmitir)
-cibRouter.get('/api/cib/remessas', asyncRoute(async (req, res) => {
-  const { rows } = await query(`SELECT * FROM cib_remessas WHERE municipio = $1 ORDER BY numero DESC`, [muniDe(req)]);
-  res.json(rows);
-}));
-
-/** Agrupa as movimentacoes validadas (fila de transmissao) numa nova remessa numerada. */
-export async function prepararRemessa(municipio, { modo = 'lote', obs = '', usuario = '' } = {}) {
-  return withTransaction(async (db) => {
-    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['remessa:' + municipio]);
-    const fila = (await db.query(`SELECT id FROM cib_movimentacoes WHERE municipio = $1 AND status = 'validada' AND remessa_id IS NULL ORDER BY id LIMIT 5000`, [municipio])).rows;
-    if (!fila.length) throw erro(409, 'Não há movimentações validadas na fila de transmissão.');
-    const numero = (await db.query('SELECT COALESCE(MAX(numero),0)::int + 1 AS n FROM cib_remessas WHERE municipio = $1', [municipio])).rows[0].n;
-    const r = (await db.query(
-      `INSERT INTO cib_remessas (municipio, numero, competencia, qtd_itens, modo, criado_por_nome, obs) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [municipio, numero, competenciaDe(), fila.length, modo === 'api' ? 'api' : 'lote', usuario, String(obs || '').slice(0, 500)]
-    )).rows[0];
-    await db.query('UPDATE cib_movimentacoes SET remessa_id = $1, updated_at = NOW() WHERE id = ANY($2::bigint[])', [r.id, fila.map((f) => f.id)]);
-    await auditar(db, { municipio, entidade: 'remessa', entidadeId: r.id, acao: 'preparar', detalhe: `Remessa ${numero} com ${fila.length} itens`, usuario });
-    return r;
-  });
-}
-
-/** Marca a remessa como enviada (em lote: protocolo informado; via API: adaptador SINTER_API_URL). */
-export async function enviarRemessa(remessaId, { protocolo = '', modo = null, usuario = '' } = {}) {
-  const { rem, arquivo } = await montarArquivoRemessa(remessaId);
-  if (rem.status !== 'preparada') throw erro(409, 'Remessa já enviada.');
-  protocolo = String(protocolo || '').trim().slice(0, 80);
-  modo = modo === 'api' ? 'api' : (modo === 'lote' ? 'lote' : rem.modo);
-  if (modo === 'api') {
-    const url = process.env.SINTER_API_URL;
-    if (!url) throw erro(400, 'Envio por API indisponível: configure SINTER_API_URL (e SINTER_API_TOKEN) ou use o envio em lote.');
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.SINTER_API_TOKEN ? { Authorization: 'Bearer ' + process.env.SINTER_API_TOKEN } : {}) }, body: JSON.stringify(arquivo) });
-    const corpo = await r.json().catch(() => ({}));
-    if (!r.ok) throw erro(502, 'O Sinter recusou a remessa: ' + (corpo.mensagem || corpo.error || r.statusText));
-    protocolo = String(corpo.protocolo || corpo.id || protocolo || '').slice(0, 80);
-  }
-  if (!protocolo) protocolo = `BZR-${rem.competencia.replace('-', '')}-${String(rem.numero).padStart(3, '0')}`;
-  const hash = crypto.createHash('sha256').update(JSON.stringify(arquivo)).digest('hex');
-  await withTransaction(async (db) => {
-    await db.query(`UPDATE cib_remessas SET status = 'enviada', modo = $2, protocolo = $3, hash_arquivo = $4, enviada_em = NOW() WHERE id = $1`, [rem.id, modo, protocolo, hash]);
-    await db.query(`UPDATE cib_movimentacoes SET status = 'transmitida', transmitido_em = NOW(), updated_at = NOW() WHERE remessa_id = $1 AND status = 'validada'`, [rem.id]);
-    await db.query(`UPDATE imoveis SET transmitido = TRUE WHERE id IN (SELECT imovel_id FROM cib_movimentacoes WHERE remessa_id = $1)`, [rem.id]);
-    await recalcularStatus(db, { municipio: rem.municipio });
-    await auditar(db, { municipio: rem.municipio, entidade: 'remessa', entidadeId: rem.id, acao: 'enviar',
-      detalhe: `Remessa ${rem.numero} enviada (${modo}) · protocolo ${protocolo} · sha256 ${hash.slice(0, 16)}…`, usuario });
-  });
-  return (await query('SELECT * FROM cib_remessas WHERE id = $1', [rem.id])).rows[0];
-}
-
-cibRouter.post('/api/cib/remessas', gestor, asyncRoute(async (req, res) => {
-  res.json(await prepararRemessa(muniDe(req), { modo: req.body?.modo, obs: req.body?.obs, usuario: nomeUsuario(req) }));
-}));
-
-cibRouter.get('/api/cib/remessas/:id/arquivo', asyncRoute(async (req, res) => {
-  const { rem, arquivo } = await montarArquivoRemessa(req.params.id);
-  const nome = `remessa-sinter-${String(rem.numero).padStart(3, '0')}-${rem.competencia}`;
-  if (req.query.formato === 'csv') {
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${nome}.csv"`);
-    return res.send(csvRemessa(arquivo));
-  }
-  res.setHeader('Content-Disposition', `attachment; filename="${nome}.json"`);
-  res.json(arquivo);
-}));
-
-// Envio: em lote (arquivo baixado e enviado no portal, protocolo informado) ou
-// via API (SINTER_API_URL configurada — adaptador generico).
-cibRouter.post('/api/cib/remessas/:id/enviar', gestor, asyncRoute(async (req, res) => {
-  res.json(await enviarRemessa(Number(req.params.id), { protocolo: req.body?.protocolo, modo: req.body?.modo, usuario: nomeUsuario(req) }));
-}));
-
-// Retorno do Sinter: [{ inscricao, situacao: ok|divergente|erro, cib, campo, valorMunicipio, valorExterno, mensagem }]
-cibRouter.post('/api/cib/remessas/:id/retorno', gestor, asyncRoute(async (req, res) => {
-  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
-  if (!itens.length) throw erro(400, 'Envie { itens: [...] } com o retorno do Sinter.');
-  res.json(await withTransaction((db) => processarRetorno(db, Number(req.params.id), itens, nomeUsuario(req))));
-}));
-
-// Somente demonstracao (CIB_SIMULAR_RETORNO=true): gera um retorno plausivel.
-cibRouter.post('/api/cib/remessas/:id/simular-retorno', gestor, asyncRoute(async (req, res) => {
-  if (!SIMULAR) throw erro(403, 'Simulação desligada. Defina CIB_SIMULAR_RETORNO=true apenas em ambiente de demonstração.');
-  res.json(await simularRetorno(Number(req.params.id), nomeUsuario(req)));
-}));
-
-export async function simularRetorno(remessaId, usuario = 'Simulação') {
-  const movs = (await query(
-    `SELECT m.inscricao, i.area_terreno_m2, i.contribuinte_nome FROM cib_movimentacoes m LEFT JOIN imoveis i ON i.id = m.imovel_id
-     WHERE m.remessa_id = $1 AND m.status = 'transmitida'`, [remessaId]
-  )).rows;
-  const itens = movs.map((m, k) => {
-    const h = parseInt(crypto.createHash('md5').update(m.inscricao + remessaId).digest('hex').slice(0, 4), 16) % 100;
-    if (h < 6 && m.area_terreno_m2) {
-      return { inscricao: m.inscricao, situacao: 'divergente', cib: cibSimulado(m.inscricao), campo: 'area_terreno_m2', fonte: 'cartorio',
-        valorMunicipio: String(m.area_terreno_m2), valorExterno: String(Math.round(m.area_terreno_m2 * (1.08 + (k % 5) / 100))),
-        mensagem: 'Área do terreno diverge da matrícula do cartório' };
-    }
-    if (h < 9) return { inscricao: m.inscricao, situacao: 'erro', mensagem: 'Logradouro não localizado na base do Sinter' };
-    return { inscricao: m.inscricao, situacao: 'ok', cib: cibSimulado(m.inscricao), mensagem: 'CIB atribuído' };
-  });
-  return withTransaction((db) => processarRetorno(db, remessaId, itens, usuario));
-}
-
-// -- divergencias (Conciliar)
-cibRouter.get('/api/cib/divergencias', asyncRoute(async (req, res) => {
-  const params = [muniDe(req)];
-  let w = 'd.municipio = $1';
-  if (req.query.status) { params.push(String(req.query.status)); w += ` AND d.status = $${params.length}`; }
-  const { rows } = await query(
-    `SELECT d.*, i.inscricao, i.cib, i.logradouro, i.numero, i.bairro, r.numero AS remessa_numero
-     FROM cib_divergencias d LEFT JOIN imoveis i ON i.id = d.imovel_id LEFT JOIN cib_remessas r ON r.id = d.remessa_id
-     WHERE ${w} ORDER BY d.status = 'aberta' DESC, d.created_at DESC LIMIT 500`, params
-  );
-  res.json(rows);
-}));
-
-cibRouter.post('/api/cib/divergencias/:id/resolver', asyncRoute(async (req, res) => {
-  const acao = String(req.body?.acao || '');
-  if (!['adotar_externo', 'manter_municipio', 'ignorar'].includes(acao)) throw erro(400, 'Ação inválida.');
-  const out = await withTransaction(async (db) => {
-    const d = (await db.query('SELECT * FROM cib_divergencias WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
-    if (!d) throw erro(404, 'Divergência não encontrada.');
-    if (d.status !== 'aberta') throw erro(409, 'Divergência já resolvida.');
-    const im = (await db.query('SELECT * FROM imoveis WHERE id = $1', [d.imovel_id])).rows[0];
-    let resolucao = String(req.body?.resolucao || '').slice(0, 1000);
-    if (acao === 'adotar_externo') {
-      if (!CAMPOS_IMOVEL[d.campo]) throw erro(400, `Campo "${d.campo}" não pode ser ajustado automaticamente; corrija no cadastro.`);
-      const mov = await capturarMovimentacao(db, { municipio: d.municipio, imovelId: d.imovel_id, inscricao: im.inscricao, tipo: 'alteracao',
-        origem: 'conciliacao', descricao: `Conciliação: ${ROTULOS[d.campo] || d.campo} ajustado conforme ${d.fonte}`,
-        dadosDepois: { [d.campo]: d.valor_externo }, usuario: nomeUsuario(req) });
-      await validarMovimentacao(db, mov.id, nomeUsuario(req));
-      resolucao = resolucao || `Cadastro municipal ajustado para o valor do ${d.fonte} (${d.valor_externo}).`;
-    } else if (acao === 'manter_municipio') {
-      // Retransmite o dado municipal (com justificativa) na proxima remessa.
-      await db.query(
-        `INSERT INTO cib_movimentacoes (municipio, imovel_id, inscricao, tipo, origem, descricao, dados_depois, status, validado_em, competencia, criado_por_nome)
-         VALUES ($1,$2,$3,'alteracao','conciliacao',$4,$5::jsonb,'validada',NOW(),$6,$7)`,
-        [d.municipio, d.imovel_id, im.inscricao, `Conciliação: mantido o dado municipal de ${ROTULOS[d.campo] || d.campo}`,
-          JSON.stringify(d.campo && CAMPOS_IMOVEL[d.campo] ? { [d.campo]: im[d.campo] } : {}), competenciaDe(), nomeUsuario(req)]
-      );
-      resolucao = resolucao || 'Mantido o dado municipal; retransmitido com justificativa.';
-    } else resolucao = resolucao || 'Divergência desconsiderada pela equipe.';
-    await db.query(`UPDATE cib_divergencias SET status = $2, resolucao = $3, resolvido_por_nome = $4, resolvido_em = NOW() WHERE id = $1`,
-      [d.id, acao === 'ignorar' ? 'ignorada' : 'resolvida', resolucao, nomeUsuario(req)]);
-    if (d.movimentacao_id) {
-      const abertas = (await db.query(`SELECT COUNT(*)::int AS n FROM cib_divergencias WHERE movimentacao_id = $1 AND status = 'aberta'`, [d.movimentacao_id])).rows[0].n;
-      if (!abertas) await db.query(`UPDATE cib_movimentacoes SET status = 'conciliada', conciliado_em = NOW() WHERE id = $1 AND status = 'divergente'`, [d.movimentacao_id]);
-    }
-    await recalcularStatus(db, { ids: [d.imovel_id] });
-    await auditar(db, { municipio: d.municipio, entidade: 'divergencia', entidadeId: d.id, acao, detalhe: `${im.inscricao}: ${resolucao}`, usuario: nomeUsuario(req) });
-    return d.id;
-  });
-  res.json({ ok: true, id: out });
-}));
-
 // Atribuicao manual de CIB (ex.: consulta no portal do Sinter).
 cibRouter.patch('/api/cib/imoveis/:id/cib', gestor, asyncRoute(async (req, res) => {
   const cib = String(req.body?.cib || '').trim().toUpperCase().slice(0, 20);
   const { rows } = await query(
-    `UPDATE imoveis SET cib = $2, cib_atribuido_em = CASE WHEN $2 = '' THEN NULL ELSE COALESCE(cib_atribuido_em, NOW()) END, transmitido = (transmitido OR $2 <> ''), updated_at = NOW()
+    `UPDATE imoveis SET cib = $2, cib_simulado = FALSE, cib_atribuido_em = CASE WHEN $2 = '' THEN NULL ELSE COALESCE(cib_atribuido_em, NOW()) END, transmitido = (transmitido OR $2 <> ''), updated_at = NOW()
      WHERE id = $1 RETURNING municipio, inscricao`, [req.params.id, cib]
   );
   if (!rows[0]) throw erro(404, 'Imóvel não encontrado.');
@@ -1553,35 +1301,6 @@ cibRouter.patch('/api/cib/vistorias/:id', asyncRoute(async (req, res) => {
     return (await db.query('SELECT * FROM cib_vistorias WHERE id = $1', [v.id])).rows[0];
   });
   res.json(out);
-}));
-
-// -- PGV
-cibRouter.get('/api/cib/pgv', asyncRoute(async (req, res) => {
-  const m = muniDe(req);
-  const valores = (await query(`SELECT tipo, chave, valor_m2::float AS valor, ano FROM pgv_valores WHERE municipio = $1 ORDER BY tipo, chave`, [m])).rows;
-  const bairros = (await query(`SELECT DISTINCT bairro FROM imoveis WHERE municipio = $1 AND bairro <> '' ORDER BY 1`, [m])).rows.map((r) => r.bairro);
-  const resumo = (await query(
-    `SELECT COALESCE(NULLIF(bairro,''),'(sem bairro)') AS bairro, COUNT(*)::int AS n, COALESCE(SUM(valor_venal_total),0)::float AS total,
-            COALESCE(AVG(valor_venal_total),0)::float AS medio
-     FROM imoveis WHERE municipio = $1 AND situacao = 'ativo' GROUP BY 1 ORDER BY total DESC`, [m]
-  )).rows;
-  res.json({ valores, bairros, padroes: ['baixo', 'medio', 'alto', 'luxo'], resumo });
-}));
-cibRouter.put('/api/cib/pgv', gestor, asyncRoute(async (req, res) => {
-  const m = muniDe(req);
-  const ano = Number(req.body?.ano) || new Date().getFullYear();
-  const linhas = [];
-  for (const t of ['terreno', 'construcao']) for (const v of (req.body?.[t] || [])) {
-    if (!v?.chave) continue;
-    linhas.push([t, String(v.chave).trim().slice(0, 80), Number(num(v.valor)) || 0]);
-  }
-  await withTransaction(async (db) => {
-    await db.query('DELETE FROM pgv_valores WHERE municipio = $1', [m]);
-    for (const [t, k, v] of linhas) await db.query('INSERT INTO pgv_valores (municipio, tipo, chave, valor_m2, ano) VALUES ($1,$2,$3,$4,$5)', [m, t, k, v, ano]);
-    await processarImoveis(db, { municipio: m });
-    await auditar(db, { municipio: m, entidade: 'pgv', acao: 'salvar', detalhe: `${linhas.length} valores (${ano}); valores venais recalculados`, usuario: nomeUsuario(req) });
-  });
-  res.json({ ok: true });
 }));
 
 // -- auditoria

@@ -220,6 +220,26 @@ export const gis = {
 
   hasOverlay(id) { return Boolean(overlays[id]); },
 
+  /** Área visível com folga (fração), em [oeste, sul, leste, norte]. */
+  bbox(folga = 0.2) {
+    const b = map.getBounds().pad(folga);
+    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => Math.round(n * 1e5) / 1e5);
+  },
+  zoom() { return map.getZoom(); },
+  aoMover(fn) { let t; map.on('moveend', () => { clearTimeout(t); t = setTimeout(fn, 300); }); },
+  /** Aviso discreto sobre o mapa (ex.: "aproxime para ver os lotes"). */
+  aviso(texto) {
+    let el = document.getElementById('map-aviso');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'map-aviso';
+      el.style.cssText = 'position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:800;background:var(--card);color:var(--ink);border:1px solid var(--line-2);padding:6px 12px;font:12px var(--font-ui);box-shadow:var(--shadow);pointer-events:none;max-width:90%;text-align:center';
+      map.getContainer().appendChild(el);
+    }
+    el.textContent = texto || '';
+    el.style.display = texto ? '' : 'none';
+  },
+
   toggleOverlay(id, on) {
     overlayState[id] = on;
     if (overlays[id]) {

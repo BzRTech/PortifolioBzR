@@ -1,19 +1,20 @@
-// Autenticacao leve com 3 perfis (admin / coordenador / tecnico).
-// Sem dependencias externas: hash de senha com scrypt (crypto) e token
-// stateless assinado com HMAC-SHA256 (formato tipo-JWT). Reaproveita o mesmo
-// pool de conexao (src/db.js) dos demais modulos.
+// Autenticação com 4 perfis:
+//   admin        — tudo, inclusive usuários
+//   coordenador  — remessas/retorno do Sinter, configuração, PGV, documentos
+//   tecnico      — operação do cadastro, campo e atendimento
+//   gestor       — SOMENTE LEITURA (prefeito, controle interno): painel e relatórios
+// Sem dependências externas: hash scrypt e token HMAC-SHA256 (tipo JWT).
+// Em produção o login é obrigatório e o segredo não tem valor padrão (src/env.js).
 import { Router } from 'express';
 import crypto from 'crypto';
 import { query, isConfigured } from './db.js';
+import { PRODUCAO, senhaAdminInicial } from './env.js';
 
-export const ROLES = ['admin', 'coordenador', 'tecnico'];
-const SECRET = process.env.AUTH_SECRET || 'bzr-dev-secret-troque-em-producao';
+export const ROLES = ['admin', 'coordenador', 'tecnico', 'gestor'];
+const SECRET = process.env.AUTH_SECRET || (PRODUCAO ? '' : 'bzr-dev-secret-troque-em-producao');
 const TOKEN_TTL_S = 60 * 60 * 12; // 12h
 
-// Login LIGA/DESLIGA. Desligado (padrao): ninguem precisa autenticar — os
-// modulos ficam abertos e a tabela `usuarios` serve apenas como diretorio de
-// membros da equipe (para atribuir responsaveis). Ligue com AUTH_ENABLED=true
-// para exigir login e aplicar os 3 perfis (usado no fluxo de aprovacao do BCI).
+// Login LIGA/DESLIGA. Desligado só é aceito fora de produção (demonstração).
 export const AUTH_ENABLED = String(process.env.AUTH_ENABLED || 'false') === 'true';
 const ANON = { uid: null, role: 'anon', nome: '' };
 
@@ -36,6 +37,7 @@ export function verificaSenha(senha, armazenado) {
 // ---- Token assinado (payload.b64 . hmac.b64) -----------------------------
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 function assinar(payloadObj) {
+  if (!SECRET) throw new Error('AUTH_SECRET não configurado.');
   const payload = b64u(JSON.stringify(payloadObj));
   const sig = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
   return `${payload}.${sig}`;
@@ -44,7 +46,7 @@ export function emitirToken(user) {
   return assinar({ uid: user.id, role: user.role, nome: user.nome, exp: Math.floor(Date.now() / 1000) + TOKEN_TTL_S });
 }
 export function verificarToken(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
+  if (!SECRET || !token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payload, sig] = token.split('.');
   const esperado = crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
   if (sig.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(esperado))) return null;
@@ -56,10 +58,15 @@ export function verificarToken(token) {
 }
 
 // ---- Middleware ----------------------------------------------------------
-function tokenDaRequest(req) {
+export function tokenDaRequest(req) {
   const h = req.get('authorization') || '';
   if (h.startsWith('Bearer ')) return h.slice(7);
   return null;
+}
+/** Usuário da requisição (sem exigir login). */
+export function usuarioDa(req) {
+  if (!AUTH_ENABLED) return ANON;
+  return verificarToken(tokenDaRequest(req)) || null;
 }
 export function requireAuth(req, res, next) {
   if (!AUTH_ENABLED) { req.user = ANON; return next(); }
@@ -72,13 +79,22 @@ export const requireRole = (...roles) => (req, res, next) => {
   if (!AUTH_ENABLED) { req.user = ANON; return next(); }
   const claims = verificarToken(tokenDaRequest(req));
   if (!claims) return res.status(401).json({ error: 'Não autenticado.' });
-  if (!roles.includes(claims.role)) return res.status(403).json({ error: 'Sem permissão.' });
+  if (!roles.includes(claims.role)) return res.status(403).json({ error: 'Sem permissão para esta ação.' });
   req.user = claims;
   next();
 };
+/** Perfil "gestor" é somente leitura: bloqueia qualquer escrita na API. */
+export function bloquearEscritaGestor(req, res, next) {
+  if (!AUTH_ENABLED || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  if (req.path === '/api/auth/login') return next();
+  const claims = verificarToken(tokenDaRequest(req));
+  if (claims?.role === 'gestor') return res.status(403).json({ error: 'Perfil gestor é somente leitura.' });
+  next();
+}
 
-// ---- Schema + seed do admin ----------------------------------------------
-export async function ensureAuthSchema() {
+// ---- Schema (legado) + usuário inicial -----------------------------------
+/** Tabela de usuários — usada só na adoção de bancos anteriores às migrations. */
+export async function ensureAuthSchemaLegado() {
   if (!isConfigured) return false;
   await query(`
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -91,28 +107,36 @@ export async function ensureAuthSchema() {
       ativo      BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
-
-  // Seed inicial: cria os usuarios de demonstracao se a tabela estiver vazia.
-  const { rows } = await query('SELECT COUNT(*)::int AS n FROM usuarios');
-  if (rows[0].n === 0) {
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@bzr.com';
-    const adminSenha = process.env.ADMIN_PASSWORD || 'bzr1234';
-    const semente = [
-      ['Administrador BzR', adminEmail, adminSenha, 'admin', ''],
-      ['Coordenação (demo)', 'coordenador@bzr.com', 'bzr1234', 'coordenador', 'CTM'],
-      ['Técnico de Campo (demo)', 'tecnico@bzr.com', 'bzr1234', 'tecnico', 'PD'],
-    ];
-    for (const [nome, email, senha, role, equipe] of semente) {
-      await query(
-        `INSERT INTO usuarios (nome, email, senha_hash, role, equipe) VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (email) DO NOTHING`,
-        [nome, email.toLowerCase(), hashSenha(senha), role, equipe]
-      );
-    }
-    console.log(`[auth] usuários de demonstração criados (admin: ${adminEmail}).`);
-  }
   return true;
 }
+
+/**
+ * Cria o admin inicial quando não há usuários. Contas de demonstração
+ * (coordenador/técnico/gestor com senha conhecida) só fora de produção.
+ */
+export async function semearUsuarios() {
+  if (!isConfigured) return false;
+  const { rows } = await query('SELECT COUNT(*)::int AS n FROM usuarios');
+  if (rows[0].n > 0) return false;
+  const adminEmail = String(process.env.ADMIN_EMAIL || 'admin@bzr.com').toLowerCase();
+  const semente = [['Administrador', adminEmail, senhaAdminInicial(), 'admin', '']];
+  if (!PRODUCAO) {
+    semente.push(
+      ['Coordenação (demo)', 'coordenador@bzr.com', 'bzr1234', 'coordenador', 'CTM'],
+      ['Técnico de Campo (demo)', 'tecnico@bzr.com', 'bzr1234', 'tecnico', 'PD'],
+      ['Gestor — somente leitura (demo)', 'gestor@bzr.com', 'bzr1234', 'gestor', 'Gabinete'],
+    );
+  }
+  for (const [nome, email, senha, role, equipe] of semente) {
+    await query(`INSERT INTO usuarios (nome, email, senha_hash, role, equipe) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (email) DO NOTHING`,
+      [nome, email, hashSenha(senha), role, equipe]);
+  }
+  console.log(`[auth] usuário inicial criado (admin: ${adminEmail})${PRODUCAO ? '' : ' + contas de demonstração'}.`);
+  return true;
+}
+
+// Compatibilidade com scripts antigos.
+export async function ensureAuthSchema() { await ensureAuthSchemaLegado(); await semearUsuarios(); return true; }
 
 // ---- Rotas ---------------------------------------------------------------
 const publicUser = (r) => ({ id: r.id, nome: r.nome, email: r.email, role: r.role, equipe: r.equipe || '', ativo: r.ativo });
@@ -145,11 +169,11 @@ authRouter.get('/api/auth/me', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Lista de usuários (para atribuir responsáveis nas demandas). Qualquer
-// usuário autenticado pode ler a lista (apenas dados públicos).
+// Lista de usuários (para atribuir responsáveis). Qualquer usuário autenticado.
 authRouter.get('/api/usuarios', requireAuth, async (req, res) => {
   try {
-    const { rows } = await query('SELECT * FROM usuarios WHERE ativo = TRUE ORDER BY nome');
+    const todos = req.query.todos === '1' && (!AUTH_ENABLED || req.user.role === 'admin');
+    const { rows } = await query(`SELECT * FROM usuarios ${todos ? '' : 'WHERE ativo = TRUE'} ORDER BY nome`);
     res.json(rows.map(publicUser));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -161,13 +185,12 @@ authRouter.post('/api/usuarios', requireRole('admin'), async (req, res) => {
   const senha = String(req.body?.senha || '');
   const role = ROLES.includes(req.body?.role) ? req.body.role : 'tecnico';
   const equipe = String(req.body?.equipe || '').trim().slice(0, 40);
-  if (!nome || !email || senha.length < 4) {
-    return res.status(400).json({ error: 'Nome, e-mail e senha (mín. 4) são obrigatórios.' });
+  if (!nome || !email || senha.length < (PRODUCAO ? 10 : 4)) {
+    return res.status(400).json({ error: `Nome, e-mail e senha (mín. ${PRODUCAO ? 10 : 4} caracteres) são obrigatórios.` });
   }
   try {
     const { rows } = await query(
-      `INSERT INTO usuarios (nome, email, senha_hash, role, equipe)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      `INSERT INTO usuarios (nome, email, senha_hash, role, equipe) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [nome, email, hashSenha(senha), role, equipe]
     );
     res.json(publicUser(rows[0]));
@@ -175,4 +198,23 @@ authRouter.post('/api/usuarios', requireRole('admin'), async (req, res) => {
     if (String(e.message).includes('duplicate')) return res.status(409).json({ error: 'E-mail já cadastrado.' });
     res.status(500).json({ error: e.message });
   }
+});
+
+// Perfil / ativo / senha — somente admin.
+authRouter.patch('/api/usuarios/:id', requireRole('admin'), async (req, res) => {
+  const sets = [], params = [];
+  const push = (col, v) => { params.push(v); sets.push(`${col} = $${params.length}`); };
+  if (req.body?.role !== undefined) { if (!ROLES.includes(req.body.role)) return res.status(400).json({ error: 'Perfil inválido.' }); push('role', req.body.role); }
+  if (req.body?.ativo !== undefined) push('ativo', Boolean(req.body.ativo));
+  if (req.body?.senha) { if (String(req.body.senha).length < (PRODUCAO ? 10 : 4)) return res.status(400).json({ error: 'Senha curta.' }); push('senha_hash', hashSenha(req.body.senha)); }
+  if (!sets.length) return res.status(400).json({ error: 'Nada a alterar.' });
+  if (AUTH_ENABLED && Number(req.params.id) === Number(req.user.uid) && (req.body?.ativo === false || (req.body?.role && req.body.role !== 'admin'))) {
+    return res.status(409).json({ error: 'Você não pode rebaixar nem desativar a própria conta.' });
+  }
+  params.push(req.params.id);
+  try {
+    const { rows } = await query(`UPDATE usuarios SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
+    if (!rows[0]) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json(publicUser(rows[0]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });

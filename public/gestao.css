@@ -194,3 +194,7 @@ table.t td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .grid2 > *, .cards > * { min-width: 0; }
 .box { overflow-x: auto; }
 .feed > div { flex-wrap: wrap; row-gap: 4px; }
+
+/* Perfil gestor: somente leitura (a API também bloqueia qualquer escrita). */
+html[data-perfil="gestor"] .w, html[data-perfil="gestor"] .b.pri:not(.leitura), html[data-perfil="gestor"] .b.ok, html[data-perfil="gestor"] .b.danger { display: none !important; }
+.aviso-leitura { background: var(--amarelo); color: #1a1a1a; font: 600 12.5px var(--font-ui); padding: 7px 18px; text-align: center; }

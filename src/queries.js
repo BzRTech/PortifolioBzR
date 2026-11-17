@@ -40,7 +40,8 @@ export async function getLayerGeoJSON(layer, opts = {}) {
   const cfg = TABLES[layer];
   if (!cfg) throw new Error('Camada invalida: ' + layer);
 
-  const { bbox, bairro, municipio, limit, simplify, includeProps } = opts;
+  const { bbox, bairro, municipio, simplify, includeProps } = opts;
+  let { limit } = opts;
   const where = [];
   const params = [];
 
@@ -60,7 +61,11 @@ export async function getLayerGeoJSON(layer, opts = {}) {
   }
 
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
-  const limitSql = Number.isFinite(limit) && limit > 0 ? `LIMIT ${Math.floor(limit)}` : '';
+  // Nunca devolve mais que MAPA_MAX_FEICOES de uma vez (municípios grandes): o
+  // front pede por bbox (área visível) e mostra aviso quando a resposta vem truncada.
+  const teto = Number(process.env.MAPA_MAX_FEICOES) || 20000;
+  if (!(Number.isFinite(limit) && limit > 0) || limit > teto) opts.limit = teto;
+  const limitSql = `LIMIT ${Math.floor(opts.limit ?? limit) + 1}`;
   const tol = Number(simplify);
   const geomExpr =
     Number.isFinite(tol) && tol > 0
@@ -87,8 +92,15 @@ export async function getLayerGeoJSON(layer, opts = {}) {
       ${limitSql}
     ) f`;
 
+  limit = opts.limit;
   const r = await query(sql, params);
-  return r.rows[0].fc;
+  const fc = r.rows[0].fc;
+  // limit+1 foi pedido: se veio a mais, a área tem mais feições que o limite.
+  if (Number.isFinite(limit) && limit > 0 && fc.features.length > limit) {
+    fc.features = fc.features.slice(0, limit);
+    fc.truncado = true;
+  }
+  return fc;
 }
 
 /** Lista de bairros (nomes) para popular filtros no front. */

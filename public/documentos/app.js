@@ -26,7 +26,7 @@ const abrirDoc = (id) => window.open('/documentos/ver.html?id=' + id, '_blank');
 // ------------------------------------------------------------------ ATENDIMENTO
 async function atendimento(v) {
   v.innerHTML = `${cab('Protocolo', 'Atendimento ao cidadão', 'Requerimentos com número de protocolo, prazo e tramitação. Ao deferir: certidões são emitidas na hora; revisões, inclusões, transferências e baixas viram eventos do ciclo mensal (e vão ao Sinter); vistorias viram demanda para a equipe de campo.',
-    '<button class="b pri" id="bt-novo">＋ Novo requerimento</button>')}
+    '<button class="b pri w" id="bt-novo">＋ Novo requerimento</button>')}
     <div class="toolbar2"><select id="fst"><option value="abertos">Em aberto</option><option value="">Todos</option>${['protocolado', 'em_analise', 'pendente_documentacao', 'deferido', 'indeferido', 'concluido', 'arquivado'].map((s) => `<option value="${s}">${G.ROT[s]}</option>`).join('')}</select>
       <select id="ftp"><option value="">Todos os assuntos</option>${S.cat.requerimentos.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select>
       <input type="search" id="q" placeholder="Protocolo, requerente, inscrição…" /></div>
@@ -53,7 +53,7 @@ function novoReq(depois) {
     corpo: `<div class="f">
       <label>Assunto<select id="r-tipo">${S.cat.requerimentos.map((t) => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></label>
       <label id="r-doc-l">Documento requerido<select id="r-doc">${certs.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join('')}</select></label>
-      <label>Nome do requerente *<input id="r-nome" /></label><label>CPF/CNPJ *<input id="r-cpf" inputmode="numeric" /></label>
+      <label>Nome do requerente *<input id="r-nome" /></label><label>CPF/CNPJ * (aceita CNPJ alfanumérico)<input id="r-cpf" autocomplete="off" /></label>
       <label>E-mail<input id="r-email" type="email" /></label><label>Telefone<input id="r-tel" /></label>
       <label>Inscrição do imóvel<input id="r-insc" autocomplete="off" /><div class="sug" id="r-sug" hidden></div></label>
       <label>Prazo (opcional)<input id="r-prazo" type="date" /></label>
@@ -73,7 +73,7 @@ function novoReq(depois) {
   const tog = () => { m.$('#r-doc-l').style.display = m.$('#r-tipo').value === 'certidao' ? '' : 'none'; m.$('#r-ajuda').textContent = ajuda[m.$('#r-tipo').value] || ''; };
   m.$('#r-tipo').onchange = tog; tog();
   autocompletar(m.$('#r-insc'), m.$('#r-sug'), async (id) => {
-    try { const im = await G.api('/api/cib/imoveis/' + id); if (!m.$('#r-nome').value) m.$('#r-nome').value = im.contribuinteNome || ''; if (!m.$('#r-cpf').value) m.$('#r-cpf').value = im.contribuinteDoc || ''; } catch { /* ok */ }
+    try { const im = await G.api('/api/cib/imoveis/' + id); if (!m.$('#r-nome').value) m.$('#r-nome').value = im.contribuinteNome || ''; } catch { /* ok */ }
   });
   m.$('[data-a=c]').onclick = m.fechar;
   m.$('[data-a=s]').onclick = async () => {
@@ -97,7 +97,7 @@ function detalheReq(r, depois) {
     titulo: `Protocolo <span class="mono">${esc(r.numero)}</span> ${G.pill(r.status)}`, largo: true,
     corpo: `<div class="grid2"><div><table class="t">
       <tr><th style="width:150px">Assunto</th><td>${esc(r.tipoLabel)}</td></tr>
-      <tr><th>Requerente</th><td>${esc(r.requerenteNome)} <span class="mono dim">${esc(r.requerenteDoc)}</span><div class="dim small">${esc([r.requerenteEmail, r.requerenteTelefone].filter(Boolean).join(' · '))}</div></td></tr>
+      <tr><th>Requerente</th><td>${esc(r.requerenteNome)} <span class="mono dim" id="d-doc">${esc(r.requerenteDocMascarado)}</span> <button class="b sm w" id="d-rev">ver</button><div class="dim small">${esc([r.requerenteEmail, r.requerenteTelefone].filter(Boolean).join(' · '))}</div></td></tr>
       <tr><th>Inscrição</th><td class="mono">${esc(r.inscricao || '—')}</td></tr><tr><th>Prazo</th><td>${G.data(r.prazo)} ${r.atrasado ? G.pill('atrasado', 'atrasado') : ''}</td></tr>
       <tr><th>Pedido</th><td>${esc(r.descricao || '—')}</td></tr>${r.parecer ? `<tr><th>Parecer</th><td>${esc(r.parecer)}</td></tr>` : ''}
       ${r.documentoId ? `<tr><th>Documento</th><td><button class="b sm" id="ver-doc">abrir documento emitido</button></td></tr>` : ''}
@@ -109,7 +109,7 @@ function detalheReq(r, depois) {
           <template id="d-tpl"><div class="f" style="margin-bottom:6px;grid-template-columns:1fr 1fr auto"><select class="k">${ops}</select><input class="vv" placeholder="novo valor" /><button class="b sm" type="button">✕</button></div></template>` : ''}` : ''}</div>
       <div><div class="box"><h3>Tramitação</h3><div class="timeline">${(r.historico || []).map((h) => `<div><strong>${esc(G.ROT[h.status] || h.status)}</strong> · ${G.dataHora(h.em)}<div class="dim">${esc(h.por || '')}${h.obs ? ' — ' + esc(h.obs) : ''}</div></div>`).join('')}</div></div></div></div>`,
     rodape: `<div class="g-actions"><button class="b" id="d-comp">Comprovante</button></div>
-      <div class="g-actions">${aberto ? `<button class="b" data-ac="analisar">Em análise</button><button class="b" data-ac="pendenciar">Pendência documental</button><button class="b danger" data-ac="indeferir">Indeferir</button><button class="b pri" data-ac="deferir">Deferir</button>`
+      <div class="g-actions w">${aberto ? `<button class="b" data-ac="analisar">Em análise</button><button class="b" data-ac="pendenciar">Pendência documental</button><button class="b danger" data-ac="indeferir">Indeferir</button><button class="b pri" data-ac="deferir">Deferir</button>`
         : `${['deferido', 'indeferido'].includes(r.status) ? '<button class="b ok" data-ac="concluir">Concluir (entregue)</button>' : ''}<button class="b" data-ac="arquivar">Arquivar</button>${r.status !== 'deferido' ? '<button class="b" data-ac="reabrir">Reabrir</button>' : ''}`}</div>`,
   });
   if (precisaDados && aberto) {
@@ -117,6 +117,11 @@ function detalheReq(r, depois) {
     Object.entries(r.dados?.dadosDepois || {}).forEach(([k, val]) => { m.$('#d-add').click(); const rows = m.$$('#d-campos .f'); const last = rows[rows.length - 1]; last.querySelector('.k').value = k; last.querySelector('.vv').value = val; });
   }
   if (m.$('#ver-doc')) m.$('#ver-doc').onclick = () => abrirDoc(r.documentoId);
+  m.$('#d-rev').onclick = async () => {
+    const fin = await G.confirmar('Ver CPF/CNPJ completo', 'O acesso a dado pessoal fica registrado (LGPD).', { campo: 'Finalidade', rotulo: 'Ver', placeholder: 'ex.: conferência de identidade no atendimento' });
+    if (!fin) return;
+    try { const x = await G.post(`/api/requerimentos/${r.id}/revelar`, { finalidade: fin }); m.$('#d-doc').textContent = x.requerenteDoc; m.$('#d-rev').remove(); } catch (e) { G.falha(e); }
+  };
   m.$('#d-comp').onclick = () => window.open(`/documentos/ver.html?comprovante=${r.id}`, '_blank');
   m.$$('[data-ac]').forEach((b) => (b.onclick = async () => {
     const body = { acao: b.dataset.ac, parecer: m.$('#d-par')?.value || '', responsavelNome: m.$('#d-resp')?.value || '' };

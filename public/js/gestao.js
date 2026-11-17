@@ -148,6 +148,14 @@
       try { G.user = (await G.api('/api/auth/me')).user; } catch { return false; }
       const chip = G.el('userchip');
       if (chip) chip.innerHTML = `<span class="avatar">${G.esc((G.user.nome || '?').split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase())}</span><span class="btn-label">${G.esc(G.user.nome)} · ${G.esc(G.user.role)}</span>`;
+      document.documentElement.setAttribute('data-perfil', G.user.role);
+      if (G.user.role === 'gestor' && !document.getElementById('aviso-leitura')) {
+        const a = document.createElement('div');
+        a.id = 'aviso-leitura';
+        a.className = 'aviso-leitura';
+        a.textContent = 'Perfil gestor — somente leitura: você acompanha painel, relatórios e documentos; alterações ficam com a equipe técnica.';
+        document.body.insertBefore(a, document.body.children[1] || null);
+      }
       const sair = G.el('btn-logout');
       if (sair) { sair.hidden = false; sair.onclick = () => { localStorage.removeItem(TOKEN_KEY); location.replace('/login'); }; }
     } else {

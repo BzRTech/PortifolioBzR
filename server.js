@@ -1,6 +1,9 @@
-// Servidor Express: serve o front-end estatico e a API dos dois modulos do
-// sistema BzR — Território (WebGIS: GeoJSON, dashboard, mapa de calor,
-// ortofoto) e Ordens de Serviço (O.S. da infraestrutura + buracos do Waze).
+// Servidor Express da plataforma BzR: páginas estáticas + API dos módulos
+// Território (WebGIS), CIB/Sinter, Documentos, BCI, Demandas e O.S./Waze.
+//
+// Produção (NODE_ENV=production): o boot FALHA se o ambiente não for seguro
+// (login desligado, segredo fraco, modo demonstração, sem MUNICIPIO/PUBLIC_BASE_URL)
+// — ver src/env.js. O schema é mantido por migrations versionadas (src/migrate.js).
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -8,37 +11,72 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
+import { PRODUCAO, conferirAmbiente, modulosAtivos, MUNICIPIO_FIXO, demoPermitido } from './src/env.js';
 import { isConfigured, healthcheck, query } from './src/db.js';
-import { ensureSchema } from './src/schema.js';
+import { runMigrations } from './src/migrate.js';
 import {
   isValidLayer, getLayerGeoJSON, getDashboard, getHeatmap,
   getExtent, getCounts, getBairros, getMunicipios,
 } from './src/queries.js';
-import { seedDemo } from './scripts/seed-demo.js';
-import { seedOsDemo } from './scripts/seed-os.js';
-import { osRouter, ensureOsSchema } from './src/os.js';
+import { osRouter } from './src/os.js';
 import { IMPORT_LAYERS, insertFeatures, backfillMeasures } from './src/import.js';
-import { authRouter, ensureAuthSchema } from './src/auth.js';
-import { demandasRouter, ensureDemandasSchema } from './src/demandas.js';
-import { seedDemandasDemo } from './scripts/seed-demandas.js';
-import { bciRouter, ensureBciSchema } from './src/bci.js';
-import { seedBciDemo } from './scripts/seed-bci.js';
-import { cibRouter, ensureCibSchema } from './src/cib.js';
-import { documentosRouter, ensureDocumentosSchema } from './src/documentos.js';
-import { seedCibDemo } from './scripts/seed-cib.js';
+import { authRouter, requireAuth, requireRole, semearUsuarios, bloquearEscritaGestor, AUTH_ENABLED } from './src/auth.js';
+import { demandasRouter } from './src/demandas.js';
+import { bciRouter, semearFormularioBci } from './src/bci.js';
+import { cibRouter } from './src/cib.js';
+import { remessasRouter } from './src/cib-remessas.js';
+import { pgvRouter } from './src/pgv.js';
+import { importacaoRouter } from './src/importacao.js';
+import { lgpdRouter } from './src/lgpd.js';
+import { documentosRouter } from './src/documentos.js';
+import { limitar } from './src/ratelimit.js';
+
+// ---- Travas de ambiente (antes de qualquer coisa) -------------------------
+const amb = conferirAmbiente();
+for (const a of amb.avisos) console.warn('[env] aviso:', a);
+if (amb.erros.length) {
+  console.error('[env] Configuração insegura para produção — o servidor NÃO vai subir:');
+  for (const e of amb.erros) console.error('  ✗', e);
+  process.exit(1);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+const MODULOS = modulosAtivos();
+const ativo = (m) => MODULOS.includes(m);
 
 // Token opcional para proteger as rotas de escrita de importacao (/api/import).
-// Se definido, a pagina de importacao precisa envia-lo no cabecalho
-// `x-import-token`. Sem ele, as rotas ficam abertas (util em desenvolvimento).
 const IMPORT_TOKEN = process.env.IMPORT_TOKEN || '';
 
 const app = express();
-app.use(cors());
-// Limite generoso: importacao de GeoJSON em lote e fotos das O.S. (base64).
+app.set('trust proxy', 1); // Render/Neon: IP real do cliente para o rate limit e a auditoria LGPD
+app.disable('x-powered-by');
+app.use(cors(PRODUCAO ? { origin: process.env.PUBLIC_BASE_URL } : undefined));
+// Limite generoso: importação de GeoJSON em lote e fotos das O.S. (base64).
 app.use(express.json({ limit: '25mb' }));
+
+// ---- Liga/desliga de módulos por cliente (MODULOS=…) -----------------------
+// Páginas e APIs de módulo desligado respondem 404.
+const ROTAS_MODULO = {
+  territorio: { paginas: ['/territorio', '/territorio.html', '/importar', '/importar.html', '/mapa'], api: ['/api/layers', '/api/dashboard', '/api/heatmap', '/api/counts', '/api/bairros', '/api/extent', '/api/municipios', '/api/import'] },
+  cib: { paginas: ['/cib'], api: ['/api/cib'] },
+  documentos: { paginas: ['/documentos', '/validar', '/validar.html'], api: ['/api/documentos', '/api/requerimentos', '/api/publico'] },
+  bci: { paginas: ['/bci'], api: ['/api/bci'] },
+  demandas: { paginas: ['/demandas'], api: ['/api/demandas'] },
+  os: { paginas: ['/os'], api: ['/api/ordens', '/api/proximo-numero', '/api/ping', '/api/diagnostico'] },
+  waze: { paginas: ['/os/dashboard-waze'], api: ['/api/waze'] },
+};
+const comeca = (p, prefixos) => prefixos.some((x) => p === x || p.startsWith(x + '/') || p.startsWith(x + '.') || p.startsWith(x + '?'));
+app.use((req, res, next) => {
+  for (const [m, r] of Object.entries(ROTAS_MODULO)) {
+    if (ativo(m)) continue;
+    if (comeca(req.path, r.api)) return res.status(404).json({ error: `Módulo "${m}" não está habilitado nesta instalação.` });
+    if (comeca(req.path, r.paginas)) return res.status(404).send('Módulo não habilitado nesta instalação.');
+  }
+  next();
+});
+// Público: quais módulos estão ativos (a navegação esconde os demais).
+app.get('/api/modulos', (req, res) => res.json({ modulos: MODULOS, municipio: MUNICIPIO_FIXO || null, producao: PRODUCAO }));
 
 // ---- Tiles locais da ortofoto (opcional) ---------------------------------
 const localTilesDir = path.join(__dirname, 'tiles');
@@ -48,31 +86,37 @@ if (serveLocalTiles && fs.existsSync(localTilesDir)) {
   app.use('/tiles', express.static(localTilesDir, { maxAge: '7d', fallthrough: true }));
 }
 
-// ---- Front-end estatico ---------------------------------------------------
-// "/" e a landing institucional (public/index.html); o WebGIS de Territorio
-// passou para "/territorio" (public/territorio.html, servido pelo static
-// abaixo por causa de extensions: ['html']).
+// ---- Front-end estático ---------------------------------------------------
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
-
-// Atalhos antigos/intuitivos para a pagina principal.
 app.get(['/home', '/landing'], (req, res) => res.redirect(301, '/'));
-// Quem tinha "/" salvo como o mapa continua chegando la.
 app.get('/mapa', (req, res) => res.redirect(301, '/territorio'));
 app.get(['/cadastro', '/sinter'], (req, res) => res.redirect(302, '/cib/'));
 
-// ---- Autenticacao + modulos protegidos -----------------------------------
-// Documentos vem primeiro: tem rotas publicas (/api/publico/*, validacao) e o
-// bciRouter/demandasRouter aplicam requireAuth a toda requisicao que passa por eles.
-app.use(documentosRouter); // /api/publico/*, /api/documentos, /api/requerimentos
-app.use(authRouter);      // /api/auth/*, /api/usuarios
-app.use(demandasRouter);  // /api/demandas/*
-app.use(bciRouter);       // /api/bci/* (cadastro imobiliario)
-app.use(cibRouter);       // /api/cib/* (CIB/Sinter: imoveis, ciclo mensal, remessas, conciliacao, PGV)
+// ---- Segurança da API -----------------------------------------------------
+// Força bruta no login: 10 tentativas / 15 min por IP+e-mail.
+app.post('/api/auth/login', limitar({ nome: 'login', janelaMs: 15 * 60000, max: 10, chave: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}` }));
+// Perfil gestor é somente leitura em toda a API.
+app.use('/api', bloquearEscritaGestor);
+// Login nas APIs do Território e das O.S. (antes ficavam abertas). Rotas públicas:
+// /api/health, /api/config, /api/modulos, /api/auth/config, /api/auth/login, /api/publico/*.
+app.use(['/api/layers', '/api/dashboard', '/api/heatmap', '/api/counts', '/api/bairros', '/api/extent', '/api/municipios', '/api/import/:layer',
+  '/api/ordens', '/api/proximo-numero', '/api/ping', '/api/diagnostico', '/api/waze'], requireAuth);
+// Escrita nas O.S. e importação de camadas: técnico ou acima.
+app.use(['/api/import/:layer'], requireRole('admin', 'coordenador', 'tecnico'));
 
-// ---- Modulo de Ordens de Servico (rotas /api/ordens, /api/waze/*) --------
-app.use(osRouter);
+// ---- Módulos ---------------------------------------------------------------
+app.use(documentosRouter); // /api/publico/* (validação), /api/documentos, /api/requerimentos
+app.use(authRouter);       // /api/auth/*, /api/usuarios
+app.use(demandasRouter);   // /api/demandas/*
+app.use(bciRouter);        // /api/bci/*
+app.use(cibRouter);        // /api/cib/* (imóveis, ciclo mensal, implantação, vistoria, auditoria)
+app.use(remessasRouter);   // /api/cib/remessas, retorno, reprocessamento, divergências
+app.use(pgvRouter);        // /api/cib/pgv (exercícios)
+app.use(importacaoRouter); // /api/cib/importacoes
+app.use(lgpdRouter);       // /api/lgpd/acessos
+app.use(osRouter);         // /api/ordens, /api/waze/*
 
-// ---- Configuracao publica para o front ------------------------------------
+// ---- Configuração pública para o front ------------------------------------
 function buildPublicConfig() {
   let orthoUrl = process.env.ORTHO_TILE_URL || '';
   if (!orthoUrl && hasLocalOrtho) orthoUrl = '/tiles/ortho/{z}/{x}/{y}.png';
@@ -93,10 +137,14 @@ function buildPublicConfig() {
     layers: [
       { id: 'bairros', label: 'Bairros', kind: 'polygon' },
       { id: 'quadras', label: 'Quadras', kind: 'polygon' },
-      { id: 'lotes', label: 'Lotes', kind: 'polygon' },
-      { id: 'edificacoes', label: 'Edificacoes', kind: 'polygon' },
+      { id: 'lotes', label: 'Lotes', kind: 'polygon', porBbox: true },
+      { id: 'edificacoes', label: 'Edificacoes', kind: 'polygon', porBbox: true },
       { id: 'ruas', label: 'Ruas', kind: 'line' },
     ],
+    // Camadas pesadas são carregadas só na área visível a partir deste zoom.
+    bbox: { zoomMinimo: Number(process.env.MAPA_ZOOM_DETALHE) || 14, limite: Number(process.env.MAPA_LIMITE_FEICOES) || 5000 },
+    municipioFixo: MUNICIPIO_FIXO || null,
+    authEnabled: AUTH_ENABLED,
     dbConfigured: isConfigured,
   };
 }
@@ -113,7 +161,7 @@ function requireDb(res) {
 const asyncRoute = (fn) => (req, res) => {
   Promise.resolve(fn(req, res)).catch((err) => {
     console.error('[api]', req.path, err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: PRODUCAO ? 'Erro interno.' : err.message });
   });
 };
 
@@ -123,21 +171,21 @@ function parseBbox(value) {
   return parts.length === 4 && parts.every(Number.isFinite) ? parts : undefined;
 }
 
-const muni = (req) => (req.query.municipio ? String(req.query.municipio) : undefined);
+// Município: o da instância (MUNICIPIO) prevalece sobre o enviado pelo cliente.
+const muni = (req) => MUNICIPIO_FIXO || (req.query.municipio ? String(req.query.municipio) : undefined);
 
 // ---- Rotas da API ---------------------------------------------------------
 app.get('/api/health', asyncRoute(async (req, res) => {
   // Sempre 200 enquanto o processo HTTP estiver vivo (liveness probe).
-  // O status do banco vai no corpo — assim um banco ainda nao configurado
-  // ou "dormindo" no Neon nao derruba o health check do Render.
   const hc = await healthcheck();
-  res.status(200).json(hc);
+  res.status(200).json(PRODUCAO ? { ok: hc.ok } : hc);
 }));
 
 app.get('/api/config', (req, res) => res.json(buildPublicConfig()));
 
 app.get('/api/municipios', asyncRoute(async (req, res) => {
   if (!requireDb(res)) return;
+  if (MUNICIPIO_FIXO) return res.json([MUNICIPIO_FIXO]);
   res.json(await getMunicipios());
 }));
 
@@ -185,9 +233,6 @@ app.get('/api/layers/:layer', asyncRoute(async (req, res) => {
 }));
 
 // ---- Importacao de GeoJSON pela plataforma (/importar) --------------------
-// Fluxo (feito pela pagina, em lotes): POST /api/import/:layer com um pedaco
-// das feicoes (truncate=true so no primeiro pedaco de cada camada) e, ao final,
-// POST /api/import/:layer/finalize para recalcular areas/extensoes.
 function requireImportToken(req, res, next) {
   if (!IMPORT_TOKEN) return next();
   const sent = req.get('x-import-token') || '';
@@ -196,7 +241,7 @@ function requireImportToken(req, res, next) {
 }
 
 app.get('/api/import/config', (req, res) => {
-  res.json({ layers: IMPORT_LAYERS, tokenRequired: Boolean(IMPORT_TOKEN), dbConfigured: isConfigured });
+  res.json({ layers: IMPORT_LAYERS, tokenRequired: Boolean(IMPORT_TOKEN), dbConfigured: isConfigured, municipioFixo: MUNICIPIO_FIXO || null });
 });
 
 app.post('/api/import/:layer', requireImportToken, asyncRoute(async (req, res) => {
@@ -213,7 +258,7 @@ app.post('/api/import/:layer', requireImportToken, asyncRoute(async (req, res) =
   if (features.length > 2000) {
     return res.status(400).json({ error: 'Maximo de 2000 feicoes por requisicao (envie em lotes).' });
   }
-  const municipio = body.municipio ? String(body.municipio) : null;
+  const municipio = MUNICIPIO_FIXO || (body.municipio ? String(body.municipio) : null);
   const truncate = body.truncate === true || body.truncate === 'true';
   const { inserted, skipped } = await insertFeatures(layer, features, { municipio, truncate });
   res.json({ ok: true, inserted, skipped });
@@ -225,78 +270,47 @@ app.post('/api/import/:layer/finalize', requireImportToken, asyncRoute(async (re
   if (!IMPORT_LAYERS.includes(layer)) {
     return res.status(404).json({ error: 'Camada invalida: ' + layer });
   }
-  const municipio = req.body && req.body.municipio ? String(req.body.municipio) : null;
+  const municipio = MUNICIPIO_FIXO || (req.body && req.body.municipio ? String(req.body.municipio) : null);
   await backfillMeasures(layer, municipio);
   const counts = await getCounts(municipio);
   res.json({ ok: true, counts });
 }));
 
 // ---- Boot -----------------------------------------------------------------
+async function seedsDemonstracao() {
+  // Só fora de produção (src/env.js bloqueia em produção).
+  const seeds = [
+    ['SEED_DEMO', async () => Object.values(await getCounts()).reduce((s, n) => s + Number(n || 0), 0) === 0, async () => (await import('./scripts/seed-demo.js')).seedDemo({ truncate: true, log: console.log })],
+    ['SEED_OS_DEMO', async () => (await query('SELECT COUNT(*)::int AS n FROM ordens_servico')).rows[0].n === 0, async () => (await import('./scripts/seed-os.js')).seedOsDemo({ truncate: false, log: console.log })],
+    ['SEED_DEMANDAS_DEMO', async () => (await query('SELECT COUNT(*)::int AS n FROM demandas')).rows[0].n === 0, async () => (await import('./scripts/seed-demandas.js')).seedDemandasDemo({ log: console.log })],
+    ['SEED_BCI_DEMO', async () => (await query('SELECT COUNT(*)::int AS n FROM bci')).rows[0].n === 0, async () => (await import('./scripts/seed-bci.js')).seedBciDemo({ log: console.log })],
+    ['SEED_CIB_DEMO', async () => (await query('SELECT COUNT(*)::int AS n FROM imoveis')).rows[0].n === 0, async () => (await import('./scripts/seed-cib.js')).seedCibDemo({ log: console.log })],
+  ];
+  for (const [flag, vazio, rodar] of seeds) {
+    if (demoPermitido(flag) && await vazio()) {
+      console.log(`[demo] ${flag}=true e sem dados — carregando demonstração…`);
+      await rodar();
+    }
+  }
+}
+
 async function start() {
   if (isConfigured) {
     try {
-      await ensureSchema();
-      await ensureOsSchema();
-      await ensureAuthSchema();
-      await ensureDemandasSchema();
-      await ensureBciSchema();
-      await ensureCibSchema();
-      await ensureDocumentosSchema();
-      console.log('[db] schema verificado (território + O.S. + auth + demandas + BCI + CIB/Sinter + documentos).');
-      // Auto-seed opcional: util para um deploy de demonstracao sem shell.
-      if (String(process.env.SEED_DEMO || '') === 'true') {
-        const counts = await getCounts();
-        const total = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
-        if (total === 0) {
-          console.log('[db] SEED_DEMO=true e banco vazio — carregando cidade de demonstracao...');
-          await seedDemo({ truncate: true, log: console.log });
-          console.log('[db] seed de demonstracao concluido.');
-        }
-      }
-      // Auto-seed das O.S. de demonstracao (para apresentar o modulo ao cliente).
-      if (String(process.env.SEED_OS_DEMO || '') === 'true') {
-        const { rows } = await query('SELECT COUNT(*)::int AS n FROM ordens_servico');
-        if (rows[0].n === 0) {
-          console.log('[db] SEED_OS_DEMO=true e sem O.S. — carregando ordens de demonstracao...');
-          await seedOsDemo({ truncate: false, log: console.log });
-          console.log('[db] seed de O.S. de demonstracao concluido.');
-        }
-      }
-      // Auto-seed das demandas de demonstracao.
-      if (String(process.env.SEED_DEMANDAS_DEMO || '') === 'true') {
-        const { rows } = await query('SELECT COUNT(*)::int AS n FROM demandas');
-        if (rows[0].n === 0) {
-          console.log('[db] SEED_DEMANDAS_DEMO=true e sem demandas — carregando demonstracao...');
-          await seedDemandasDemo({ log: console.log });
-          console.log('[db] seed de demandas de demonstracao concluido.');
-        }
-      }
-      // Auto-seed dos BCIs de demonstracao.
-      if (String(process.env.SEED_BCI_DEMO || '') === 'true') {
-        const { rows } = await query('SELECT COUNT(*)::int AS n FROM bci');
-        if (rows[0].n === 0) {
-          console.log('[db] SEED_BCI_DEMO=true e sem BCIs — carregando demonstracao...');
-          await seedBciDemo({ log: console.log });
-          console.log('[db] seed de BCI de demonstracao concluido.');
-        }
-      }
-      // Auto-seed do modulo CIB/Sinter + documentos (cadastro fiscal de demonstracao).
-      if (String(process.env.SEED_CIB_DEMO || '') === 'true') {
-        const { rows } = await query('SELECT COUNT(*)::int AS n FROM imoveis');
-        if (rows[0].n === 0) {
-          console.log('[db] SEED_CIB_DEMO=true e sem imoveis — carregando cadastro de demonstracao...');
-          await seedCibDemo({ log: console.log });
-          console.log('[db] seed do CIB/Sinter concluido.');
-        }
-      }
+      const aplicadas = await runMigrations();
+      console.log(`[db] migrations em dia${aplicadas.length ? ` (aplicadas: ${aplicadas.join(', ')})` : ''}.`);
+      await semearUsuarios();
+      await semearFormularioBci();
+      if (!PRODUCAO) await seedsDemonstracao();
     } catch (e) {
-      console.error('[db] nao foi possivel preparar o schema:', e.message);
+      console.error('[db] falha ao preparar o banco:', e.message);
+      if (PRODUCAO) process.exit(1); // em produção, não sobe com schema inconsistente
     }
   } else {
     console.warn('[db] DATABASE_URL nao definida — a API de dados respondera 503 ate configurar.');
   }
   app.listen(PORT, () => {
-    console.log(`BzR rodando em http://localhost:${PORT} (Território) e /os (Ordens de Serviço)`);
+    console.log(`BzR rodando em http://localhost:${PORT}${MUNICIPIO_FIXO ? ` · município: ${MUNICIPIO_FIXO}` : ''} · módulos: ${MODULOS.join(', ')}${PRODUCAO ? ' · PRODUÇÃO' : ''}`);
   });
 }
 

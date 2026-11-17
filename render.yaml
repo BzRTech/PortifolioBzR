@@ -1,60 +1,51 @@
 # Blueprint do Render (https://render.com/docs/blueprint-spec)
-# Suba este repositorio no Render como "Blueprint" e configure o DATABASE_URL
-# (string de conexao do Neon) nas variaveis de ambiente do servico.
+# UM SERVIÇO POR PREFEITURA (docs/adr/0001-um-deploy-por-prefeitura.md):
+# duplique este serviço (e o banco no Neon) para cada município cliente.
+# Com NODE_ENV=production o servidor NÃO sobe sem login, segredo forte,
+# MUNICIPIO e PUBLIC_BASE_URL, e recusa qualquer flag de demonstração.
 services:
   - type: web
     name: bzr-gestao-publica
     runtime: node
-    plan: free
-    buildCommand: npm install
+    plan: starter
+    buildCommand: npm ci
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /api/health
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
       - key: DATABASE_URL
         sync: false
-      - key: ORTHO_TILE_URL
+      # Município desta instância (obrigatório em produção). Ex.: "Tabira"
+      - key: MUNICIPIO
         sync: false
-      # Senha da pagina de importacao (/importar). Recomendado definir em producao.
-      - key: IMPORT_TOKEN
+      # Endereço público (https://…), impresso no QR de validação dos documentos.
+      - key: PUBLIC_BASE_URL
         sync: false
-      # Mude para "true" para carregar a cidade de demonstracao no primeiro deploy
-      # (somente se o banco estiver vazio). Use "false" com dados reais.
-      - key: SEED_DEMO
-        value: "false"
-      # Mude para "true" para carregar O.S. de demonstracao (Joao Pessoa) no boot,
-      # se ainda nao houver nenhuma. Util para apresentar o modulo /os ao cliente.
-      - key: SEED_OS_DEMO
-        value: "false"
-      # Login desligado por padrao (modulos abertos). Mude para "true" para
-      # exigir login e aplicar os 3 perfis (admin/coordenador/tecnico).
+      # Login obrigatório em produção.
       - key: AUTH_ENABLED
-        value: "false"
-      # Autenticacao (usada so quando AUTH_ENABLED=true): segredo dos tokens.
+        value: "true"
       - key: AUTH_SECRET
         generateValue: true
-      # Admin criado no primeiro boot. Troque a senha depois de entrar.
+      # Admin criado no primeiro boot (senha com 12+ caracteres). Troque depois de entrar.
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      # Mude para "true" para carregar demandas de demonstracao no boot.
-      - key: SEED_DEMANDAS_DEMO
-        value: "false"
-      # Mude para "true" para carregar BCIs de demonstracao no boot.
-      - key: SEED_BCI_DEMO
-        value: "false"
-      # Mude para "true" para carregar o cadastro CIB/Sinter de demonstracao no boot.
-      - key: SEED_CIB_DEMO
-        value: "false"
-      # Botao "Simular retorno" do Sinter (gera CIBs ficticios). So para demonstracao.
-      - key: CIB_SIMULAR_RETORNO
-        value: "false"
-      # URL publica (usada no QR de validacao dos documentos).
-      - key: PUBLIC_BASE_URL
+      # Pacote contratado: territorio, cib, documentos, bci, demandas, os, waze
+      - key: MODULOS
+        value: "cib,documentos,territorio,bci,demandas"
+      # API do Sinter (credenciais do convênio). Sem elas, envio em lote (arquivo + idArquivo).
+      - key: SINTER_AMBIENTE
+        value: teste
+      - key: SINTER_CLIENT_ID
         sync: false
-      - key: SINTER_API_URL
+      - key: SINTER_CLIENT_SECRET
         sync: false
-      - key: SINTER_API_TOKEN
+      - key: ORTHO_TILE_URL
         sync: false
-      - key: NODE_VERSION
-        value: "22"
+      # Senha da página de importação de camadas (/importar), além do login.
+      - key: IMPORT_TOKEN
+        sync: false

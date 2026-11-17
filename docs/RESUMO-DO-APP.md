@@ -51,20 +51,20 @@ tarefas, ordens de serviço, atendimento ao cidadão e emissão de certidões e 
 | Aba | O que faz |
 |-----|-----------|
 | **Painel** | Imóveis com CIB, pendências, alterações no mês, última remessa, contagem até o prazo legal, o ciclo mensal com as filas de trabalho, mapa do cadastro colorido por situação e últimas movimentações. |
-| **Imóveis** | Cadastro fiscal ligando **inscrição ↔ lote do mapa ↔ CIB**. Busca por inscrição, CIB, endereço, contribuinte ou CPF/CNPJ; ficha com pendências, histórico Sinter e documentos; edição, baixa e reativação; **importação da base em CSV** do sistema tributário. |
+| **Imóveis** | Cadastro fiscal ligando **inscrição ↔ lote do mapa ↔ CIB**, com os campos exigidos pelo Sinter (tipo arquitetônico, destinação, tipo de logradouro, titularidade, CNM). CPF/CNPJ (inclusive alfanumérico) mascarado; ver o completo exige finalidade e fica registrado. **Importação incremental e idempotente** da base do sistema tributário, com relatório do que mudou. |
 | **Ciclo mensal** | Registro de eventos (ITBI, alvará, habite-se, BCI, requerimento, manual) e de **parcelamento** (desmembramento/remembramento: baixa das origens + inclusão das novas). "Validar" aplica a mudança no cadastro e coloca na fila da remessa. |
-| **Remessas** | Carga inicial, remessa numerada, arquivo JSON/CSV, envio em lote (protocolo) ou por API, hash SHA-256 de cada arquivo e importação do retorno da Receita. |
+| **Remessas** | Remessa no **leiaute oficial do Sinter** (Manual Operacional 1.17): um registro NDJSON por imóvel (inclusão, alteração ou desativação) em .zip, validado antes de gerar; arquivo congelado com SHA-256; envio pela API do Sinter ou em lote; retorno oficial idempotente; fila de reprocessamento dos rejeitados. |
 | **Conciliação** | Divergências apontadas no retorno (Sinter ou cartório): adotar o dado externo, manter o municipal (retransmite com justificativa) ou desconsiderar. |
 | **Vistoria IA** | Cruza as edificações extraídas da ortofoto com o cadastro: **edificação nova, ampliação ou possível demolição** viram lista de vistoria. Agendar cria uma demanda de campo, confirmar registra o evento, notificar emite a notificação ao contribuinte. |
 | **Implantação** | As 5 etapas com indicadores em tempo real, checklist de adesão ao convênio, raio-x da base (erros e alertas por regra, lacunas, duplicidades) e prazo estimado. Gera o relatório de diagnóstico e as minutas de ofício e termo. |
-| **PGV** | Planta Genérica de Valores: R$/m² por bairro (terreno) e por padrão construtivo (construção). Salvar recalcula o valor venal de toda a base. |
+| **PGV** | Planta Genérica de Valores por **exercício** (rascunho → vigente → encerrado). Publicar recalcula o valor venal da base numa única transação; certidões já emitidas não mudam. |
 | **Município** | Dados da prefeitura usados nos documentos e nas remessas: nome oficial, CNPJ, secretaria, brasão, prefeito, responsável técnico, convênio, prazo e transmissores. |
 | **Auditoria** | Histórico de tudo: importações, edições (antes → depois), validações, remessas, retornos, conciliações, documentos e etapas — com data e responsável. |
 
 **Regras de validação para o Sinter**
 
-- **Bloqueiam o envio:** inscrição, logradouro, bairro, área do terreno, área construída (imóvel predial), nome do contribuinte, CPF/CNPJ ausente ou com dígito errado.
-- **Só alertam:** número predial, sem vínculo com lote do mapa, área diverge mais de 10% da área do lote, CEP inválido, sem matrícula do cartório.
+- **Bloqueiam o envio** (as regras do leiaute oficial): inscrição, tipo do imóvel, área do terreno, tipo e nome do logradouro, CEP (8 dígitos), bairro (até 30), indicador de bairro; para predial, tipo arquitetônico, área construída e destinação; BICE para bem especial.
+- **Só alertam:** titular incompleto (não vai ao Sinter), CPF/CNPJ ausente ou inválido, sem CNM/matrícula, sem vínculo com o lote, área divergente da geometria, territorial com área construída.
 
 **Situação de cada imóvel no Sinter:** pendente de correção → pronto → aguardando envio → enviado → conciliado (CIB atribuído), além de *divergente* e *baixado*.
 
@@ -119,11 +119,12 @@ Imóvel com CIB ──► Declaração de Inscrição e CIB ──► /validar (
 
 | Perfil | Pode |
 |--------|------|
-| **Admin** | Tudo, inclusive cadastrar usuários. |
-| **Coordenador** | Remessas, retorno do Sinter, configuração, PGV, emissão e cancelamento de documentos, aprovação de BCI. |
-| **Técnico** | Consultar, coletar em campo, registrar e validar eventos, protocolar requerimentos. |
+| **Admin** | Tudo, inclusive usuários (aba Usuários) e o registro de acessos LGPD. |
+| **Coordenador** | Remessas, retorno do Sinter, configuração, PGV, emissão e cancelamento de documentos, exportação de arquivos com CPF/CNPJ. |
+| **Técnico** | Operar o cadastro, campo, ciclo mensal e atendimento. |
+| **Gestor** | **Somente leitura** (prefeito, controle interno): painel, relatórios (prévia do relatório mensal) e documentos, sem CPF/CNPJ completo. |
 
-O login vem **desligado** (`AUTH_ENABLED=false`): tudo abre sem senha, bom para demonstração. Ligado, aplica os três perfis. A página `/validar` é sempre pública.
+Em produção o login é **obrigatório** (o servidor não sobe sem ele). Fora de produção pode ficar desligado para demonstração. A página `/validar` é sempre pública, com limite de tentativas.
 
 ---
 
@@ -161,7 +162,7 @@ scripts/                  seeds de demonstração e importadores
 ```bash
 npm install
 cp .env.example .env        # cole a DATABASE_URL do Neon
-npm run init-db
+npm run migrate
 npm run seed-cib            # demonstração completa (cidade + cadastro + documentos)
 npm start                   # http://localhost:3000
 ```
@@ -183,9 +184,13 @@ npm start                   # http://localhost:3000
 
 ---
 
-## 9. Pontos de atenção
+## 9. Produção e pontos de atenção
 
-- **O CIB vem da Receita Federal.** Sem as credenciais do convênio, o envio é por arquivo (enviado no portal do Sinter, com o protocolo informado no app) e o retorno entra por arquivo. O layout do arquivo (`BzR-Sinter/1.0`) precisa ser ajustado ao Manual Operacional oficial.
-- **Retorno simulado** gera CIBs fictícios; manter `CIB_SIMULAR_RETORNO=false` em produção.
-- **Textos dos documentos são modelos de referência** (`src/doc-templates.js`): cada prefeitura deve revisá-los com a procuradoria, conforme seu Código Tributário.
-- **Pendência conhecida:** com o login ligado, o mapa (Território) e as Ordens de Serviço deixam de carregar, porque o BCI e as Demandas exigem login de todas as rotas. Com o login desligado (padrão), não há impacto. A página `/validar` já está corrigida.
+- **Um deploy e um banco por prefeitura** (`MUNICIPIO` trava a instância) — `docs/adr/0001-um-deploy-por-prefeitura.md`.
+- **Travas de produção** (`NODE_ENV=production`): sem login, com segredo fraco, sem `MUNICIPIO`/`PUBLIC_BASE_URL` ou com flag de demonstração, o servidor não sobe.
+- **Integridade:** documentos, auditoria, acessos LGPD e arquivos de remessa são imutáveis no banco (trigger); hash SHA-256 sobre JCS (RFC 8785); numeração transacional.
+- **Migrations** versionadas e **backup com restauração testada** — `docs/operacao.md`.
+- **Leiaute oficial:** `docs/sinter-leiaute.md` (Manual Operacional 1.17). A API do Sinter não tem reativação; CNPJ alfanumérico ainda não é aceito em `niTitular` no manual 1.17.
+- **Credenciais do Sinter** vêm do convênio de cada prefeitura (`SINTER_CLIENT_ID/SECRET`). O cliente da API foi escrito pelo manual e testado com respostas simuladas; o primeiro envio real deve ser feito no ambiente de **teste** da Receita.
+- **Textos dos documentos são modelos de referência** (`src/doc-templates.js`): revisar com a procuradoria de cada município.
+- **Rate limit** em memória: vale por instância (adequado a um deploy por prefeitura).
