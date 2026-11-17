@@ -88,8 +88,18 @@ export async function seedCibDemo({ truncate = false, log = () => {} } = {}) {
   await runMigrations({ log: () => {} });
   await semearUsuarios(); await semearFormularioBci();
 
-  const nLotes = (await query('SELECT COUNT(*)::int AS n FROM lotes')).rows[0].n;
-  if (!nLotes) { log('  sem lotes no Território — carregando a cidade de demonstração primeiro...'); await seedDemo({ truncate: true, log }); }
+  // A demonstração usa a SUA cidade fictícia ("Município Exemplo"). Se o banco já tem
+  // camadas de outro município (ex.: dados reais do Território), elas ficam intactas e a
+  // cidade fictícia é criada ao lado — nunca se gera cadastro fictício sobre município real.
+  const c = (await query(`SELECT count(*) FILTER (WHERE municipio = $1)::int AS meus,
+      count(*) FILTER (WHERE municipio IS NULL OR municipio = '')::int AS sem,
+      count(*) FILTER (WHERE municipio <> $1 AND municipio <> '')::int AS outros FROM lotes`, [MUNI])).rows[0];
+  const soDemo = c.outros === 0;
+  if (!c.meus && !(soDemo && c.sem)) {
+    log(soDemo ? '  sem lotes no Território — carregando a cidade de demonstração primeiro...'
+      : `  o banco já tem ${c.outros + c.sem} lotes de outro(s) município(s) (mantidos) — criando a cidade fictícia "${MUNI}" ao lado...`);
+    await seedDemo({ truncate: soDemo, municipio: MUNI, log });
+  }
 
   if (truncate) await limpar();
   else {
@@ -97,7 +107,8 @@ export async function seedCibDemo({ truncate = false, log = () => {} } = {}) {
     if (ja) throw new Error(`Já existem ${ja} imóveis em "${MUNI}". Use --truncate para recriar.`);
   }
 
-  for (const t of ['bairros', 'quadras', 'lotes', 'ruas', 'edificacoes']) await query(`UPDATE ${t} SET municipio = $1 WHERE municipio IS NULL OR municipio = ''`, [MUNI]);
+  // Base antiga só de demonstração (camadas sem município): passam a ser do Município Exemplo.
+  if (soDemo) for (const t of ['bairros', 'quadras', 'lotes', 'ruas', 'edificacoes']) await query(`UPDATE ${t} SET municipio = $1 WHERE municipio IS NULL OR municipio = ''`, [MUNI]);
 
   await query(
     `INSERT INTO municipio_config (municipio, nome_oficial, uf, codigo_ibge, cnpj, secretaria, setor, endereco, telefone, email,
