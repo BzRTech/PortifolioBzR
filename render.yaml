@@ -36,13 +36,26 @@ services:
         sync: false
       # Pacote contratado: territorio, cib, documentos, bci, demandas, os, waze, api
       - key: MODULOS
-        value: "cib,documentos,territorio,bci,demandas,api"
+        value: "cib,documentos,territorio,bci,demandas,api,portal"
       # Troca de município (opcional): outras prefeituras da mesma equipe, cada uma no seu deploy.
       # Ex.: "Patos=https://patos.bzr.app.br; Sousa=https://sousa.bzr.app.br"
       - key: INSTANCIAS
         sync: false
       # Mesmo valor em todas as instâncias da lista (troca sem nova senha). Vazio = pede login.
       - key: SSO_SECRET
+        sync: false
+      # Portal do Cidadão: entradas aceitas e credenciais (gov.br e e-mail do código).
+      - key: PORTAL_ENTRADA
+        value: "govbr,email,inscricao"
+      - key: GOVBR_CLIENT_ID
+        sync: false
+      - key: GOVBR_CLIENT_SECRET
+        sync: false
+      - key: GOVBR_AMBIENTE
+        value: homologacao
+      - key: SMTP_URL
+        sync: false
+      - key: SMTP_FROM
         sync: false
       # API do Sinter (credenciais do convênio). Sem elas, envio em lote (arquivo + idArquivo).
       - key: SINTER_AMBIENTE

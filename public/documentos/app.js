@@ -34,7 +34,7 @@ async function atendimento(v) {
   const carregar = async () => {
     const qs = new URLSearchParams({ status: el('fst').value, tipo: el('ftp').value, q: el('q').value });
     const lista = await G.get('/api/requerimentos?' + qs);
-    el('tb').innerHTML = lista.map((r) => `<tr class="click" data-id="${r.id}"><td class="mono"><strong>${esc(r.numero)}</strong><div class="dim small">${G.data(r.criadoEm)}</div></td>
+    el('tb').innerHTML = lista.map((r) => `<tr class="click" data-id="${r.id}"><td class="mono"><strong>${esc(r.numero)}</strong><div class="dim small">${G.data(r.criadoEm)}${r.canal === 'portal' ? ' · <span title="Feito pelo Portal do Cidadão">🌐 portal</span>' : ''}${r.qtdAnexos ? ` · 📎${r.qtdAnexos}` : ''}</div></td>
       <td>${esc(r.tipoLabel)}${r.documentoTipo ? `<div class="dim small">${esc(S.cat.documentos.find((d) => d.id === r.documentoTipo)?.titulo || '')}</div>` : ''}</td>
       <td>${esc(r.requerenteNome)}<div class="dim small mono">${esc(r.requerenteDocMascarado)}</div></td><td class="mono">${esc(r.inscricao || '—')}</td>
       <td>${G.data(r.prazo)} ${r.atrasado ? G.pill('atrasado', 'atrasado') : ''}</td><td>${G.pill(r.status)}</td><td class="small">${esc(r.responsavelNome || '—')}</td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Nenhum requerimento.</td></tr>';
@@ -99,7 +99,9 @@ function detalheReq(r, depois) {
       <tr><th style="width:150px">Assunto</th><td>${esc(r.tipoLabel)}</td></tr>
       <tr><th>Requerente</th><td>${esc(r.requerenteNome)} <span class="mono dim" id="d-doc">${esc(r.requerenteDocMascarado)}</span> <button class="b sm w" id="d-rev">ver</button><div class="dim small">${esc([r.requerenteEmail, r.requerenteTelefone].filter(Boolean).join(' · '))}</div></td></tr>
       <tr><th>Inscrição</th><td class="mono">${esc(r.inscricao || '—')}</td></tr><tr><th>Prazo</th><td>${G.data(r.prazo)} ${r.atrasado ? G.pill('atrasado', 'atrasado') : ''}</td></tr>
-      <tr><th>Pedido</th><td>${esc(r.descricao || '—')}</td></tr>${r.parecer ? `<tr><th>Parecer</th><td>${esc(r.parecer)}</td></tr>` : ''}
+      <tr><th>Canal</th><td>${r.canal === 'portal' ? '🌐 Portal do Cidadão (identidade confirmada na entrada)' : 'Balcão / atendimento'}</td></tr>
+      <tr><th>Pedido</th><td>${esc(r.descricao || '—')}${r.dados?.enderecoInformado ? `<div class="dim small">Endereço informado: ${esc(r.dados.enderecoInformado)}</div>` : ''}</td></tr>${r.parecer ? `<tr><th>Parecer</th><td>${esc(r.parecer)}</td></tr>` : ''}
+      <tr><th>Anexos</th><td id="d-anexos"><span class="dim small">carregando…</span></td></tr>
       ${r.documentoId ? `<tr><th>Documento</th><td><button class="b sm" id="ver-doc">abrir documento emitido</button></td></tr>` : ''}
       ${r.movimentacaoId ? `<tr><th>Cadastro</th><td>Evento #${r.movimentacaoId} no <a href="/cib/#ciclo">ciclo mensal</a></td></tr>` : ''}
       ${r.demandaId ? `<tr><th>Campo</th><td><a href="/demandas/">Demanda #${r.demandaId}</a></td></tr>` : ''}</table>
@@ -117,6 +119,30 @@ function detalheReq(r, depois) {
     Object.entries(r.dados?.dadosDepois || {}).forEach(([k, val]) => { m.$('#d-add').click(); const rows = m.$$('#d-campos .f'); const last = rows[rows.length - 1]; last.querySelector('.k').value = k; last.querySelector('.vv').value = val; });
   }
   if (m.$('#ver-doc')) m.$('#ver-doc').onclick = () => abrirDoc(r.documentoId);
+  // Anexos: lista + abrir (o acesso a documento pessoal entra no registro LGPD).
+  const pintarAnexos = async () => {
+    try {
+      const ax = await G.api(`/api/requerimentos/${r.id}/anexos`);
+      m.$('#d-anexos').innerHTML = (ax.length ? `<ul class="anexos">${ax.map((a) => `<li><a href="#" data-ax="${a.id}">${esc(a.nome)}</a> <span class="dim small">${(a.tamanho / 1024).toFixed(0)} KB · ${a.canal === 'portal' ? 'enviado pelo cidadão' : esc(a.enviadoPor)} · ${G.dataHora(a.enviadoEm)}</span></li>`).join('')}</ul>` : '<span class="dim small">nenhum</span>')
+        + ' <label class="b sm" style="margin-top:6px">＋ anexar (digitalizado no balcão)<input type="file" id="d-ax-in" multiple accept=".pdf,.jpg,.jpeg,.png" hidden /></label>';
+      m.$$('[data-ax]').forEach((a) => (a.onclick = async (ev) => {
+        ev.preventDefault();
+        const w = window.open('', '_blank');
+        try {
+          const resp = await fetch(`/api/requerimentos/${r.id}/anexos/${a.dataset.ax}`);
+          if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'Sem acesso ao anexo.');
+          w.location = URL.createObjectURL(await resp.blob());
+        } catch (e) { if (w) w.close(); G.falha(e); }
+      }));
+      m.$('#d-ax-in').onchange = async (ev) => {
+        try {
+          const anexos = await Promise.all([...ev.target.files].map((f) => new Promise((ok, falha) => { const fr = new FileReader(); fr.onload = () => ok({ nome: f.name, base64: String(fr.result) }); fr.onerror = falha; fr.readAsDataURL(f); })));
+          await G.post(`/api/requerimentos/${r.id}/anexos`, { anexos }); G.toast('Anexo(s) incluído(s).'); pintarAnexos();
+        } catch (e) { G.falha(e); }
+      };
+    } catch (e) { m.$('#d-anexos').textContent = e.message; }
+  };
+  pintarAnexos();
   m.$('#d-rev').onclick = async () => {
     const fin = await G.confirmar('Ver CPF/CNPJ completo', 'O acesso a dado pessoal fica registrado (LGPD).', { campo: 'Finalidade', rotulo: 'Ver', placeholder: 'ex.: conferência de identidade no atendimento' });
     if (!fin) return;

@@ -12,7 +12,7 @@ export const PRODUCAO = process.env.NODE_ENV === 'production';
 const SEGREDOS_FRACOS = new Set(['', 'troque-por-um-segredo-longo-e-aleatorio', 'bzr-dev-secret-troque-em-producao', 'changeme', 'secret']);
 const SENHAS_FRACAS = new Set(['', 'bzr1234', 'admin', '123456', '12345678', 'senha', 'password']);
 const FLAGS_DEMO = ['CIB_SIMULAR_RETORNO', 'SEED_DEMO', 'SEED_OS_DEMO', 'SEED_DEMANDAS_DEMO', 'SEED_BCI_DEMO', 'SEED_CIB_DEMO'];
-export const MODULOS_TODOS = ['territorio', 'cib', 'documentos', 'bci', 'demandas', 'os', 'waze', 'api'];
+export const MODULOS_TODOS = ['territorio', 'cib', 'documentos', 'bci', 'demandas', 'os', 'waze', 'api', 'portal'];
 
 const ligado = (v) => String(process.env[v] || '').toLowerCase() === 'true';
 
@@ -58,6 +58,11 @@ export function conferirAmbiente(env = process.env) {
   const sso = String(env.SSO_SECRET || '');
   if (sso && (SEGREDOS_FRACOS.has(sso) || sso.length < 32 || new Set(sso).size < 10)) problema('SSO_SECRET fraco: use 32+ caracteres aleatórios (o mesmo valor em todas as instâncias que trocam entre si).');
   if (sso && sso === String(env.AUTH_SECRET || '')) problema('SSO_SECRET não pode ser igual ao AUTH_SECRET (o segredo do login é exclusivo de cada instância).');
+  // Portal do Cidadão (src/cidadao.js).
+  const entradas = String(env.PORTAL_ENTRADA || 'govbr,email,inscricao').split(/[\s,;]+/).filter(Boolean);
+  if (Boolean(env.GOVBR_CLIENT_ID) !== Boolean(env.GOVBR_CLIENT_SECRET)) problema('gov.br: defina GOVBR_CLIENT_ID e GOVBR_CLIENT_SECRET juntos.');
+  if (prod && entradas.includes('email') && !env.SMTP_URL) avisos.push('Portal do Cidadão: entrada por código de e-mail desligada (falta SMTP_URL).');
+  if (prod && entradas.includes('inscricao') && entradas.length === 1) avisos.push('Portal do Cidadão: só a entrada por CPF + inscrição está ligada; prefira gov.br ou código por e-mail.');
   if (prod) {
     if (!String(env.MUNICIPIO || '').trim()) erros.push('MUNICIPIO é obrigatório em produção (um deploy por prefeitura).');
     if (!/^https:\/\//.test(String(env.PUBLIC_BASE_URL || ''))) erros.push('PUBLIC_BASE_URL (https://…) é obrigatório em produção: é o endereço impresso no QR dos documentos.');

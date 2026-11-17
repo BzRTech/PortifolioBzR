@@ -5,7 +5,8 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { query, withTransaction, isConfigured } from './db.js';
-import { requireAuth, requireRole } from './auth.js';
+import { requireAuth, requireRole, AUTH_ENABLED } from './auth.js';
+import { validarAnexos, salvarAnexos, listarAnexos, enviarAnexo } from './anexos.js';
 import { TIPOS_DOC, catalogoPublico, renderDocumento, renderComprovante } from './doc-templates.js';
 import { getConfig, getImovelCompleto, buscarImovelPorInscricao, relatorioMensal, diagnostico, capturarMovimentacao, auditar } from './cib.js';
 import { mascararDoc, isoData, jcs, normalizarNi, niValido } from './cib-validacao.js';
@@ -115,7 +116,7 @@ function gerarCodigo() {
  * Emite um documento: valida pre-requisitos do modelo, congela o conteudo,
  * numera (sequencial por tipo/ano/municipio) e gera codigo + hash.
  */
-export async function emitirDocumento({ municipio, tipo, imovelId, inscricao, campos = {}, interessado = '', requerimentoId = null, usuario = '' }) {
+export async function emitirDocumento({ municipio, tipo, imovelId, inscricao, campos = {}, interessado = '', requerimentoId = null, usuario = '', canal = 'interno', solicitanteDoc = '' }) {
   const t = TIPOS_DOC[tipo];
   if (!t) throw erro(400, 'Tipo de documento inválido.');
   const cfg = await getConfig(municipio);
@@ -144,12 +145,12 @@ export async function emitirDocumento({ municipio, tipo, imovelId, inscricao, ca
     }
     const { rows } = await db.query(
       `INSERT INTO documentos (municipio, tipo, numero, seq, ano, titulo, imovel_id, inscricao, requerimento_id, interessado, conteudo, hash_conteudo,
-         codigo_validacao, emitido_por_nome, validade, hash_alg)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,'sha256/jcs-rfc8785') RETURNING *`,
+         codigo_validacao, emitido_por_nome, validade, hash_alg, canal, solicitante_doc)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,'sha256/jcs-rfc8785',$16,$17) RETURNING *`,
       [municipio, tipo, numero, seq, ano, titulo, imovel?.id || null, imovel?.inscricao || '', requerimentoId, conteudo.interessado,
-        JSON.stringify(conteudo), hash, codigo, usuario, validade]
+        JSON.stringify(conteudo), hash, codigo, usuario, validade, canal, normalizarNi(solicitanteDoc)]
     );
-    await auditar(db, { municipio, entidade: 'documento', entidadeId: rows[0].id, acao: 'emitir', detalhe: `${titulo} nº ${numero}${imovel ? ' · ' + imovel.inscricao : ''} · ${codigo}`, usuario });
+    await auditar(db, { municipio, entidade: 'documento', entidadeId: rows[0].id, acao: 'emitir', detalhe: `${titulo} nº ${numero}${imovel ? ' · ' + imovel.inscricao : ''} · ${codigo}${canal === 'portal' ? ' · pelo Portal do Cidadão' : ''}`, usuario });
     return rows[0];
   });
 }
@@ -159,6 +160,7 @@ function mapDoc(d) {
     id: d.id, municipio: d.municipio, tipo: d.tipo, numero: d.numero, titulo: d.titulo, imovelId: d.imovel_id, inscricao: d.inscricao,
     requerimentoId: d.requerimento_id, interessado: d.interessado, codigoValidacao: d.codigo_validacao, emitidoPorNome: d.emitido_por_nome,
     emitidoEm: d.emitido_em, validade: isoData(d.validade), status: d.status, motivoCancelamento: d.motivo_cancelamento, canceladoEm: d.cancelado_em,
+    canal: d.canal || 'interno',
   };
 }
 function mapReq(r) {
@@ -169,8 +171,48 @@ function mapReq(r) {
     descricao: r.descricao, dados: r.dados, status: r.status, prazo: isoData(r.prazo), responsavelNome: r.responsavel_nome, parecer: r.parecer,
     documentoId: r.documento_id, movimentacaoId: r.movimentacao_id, demandaId: r.demanda_id, historico: r.historico || [],
     atrasado: Boolean(r.prazo && ABERTOS.includes(r.status) && isoData(r.prazo) < isoData(new Date())),
-    criadoEm: r.created_at, atualizadoEm: r.updated_at,
+    criadoEm: r.created_at, atualizadoEm: r.updated_at, canal: r.canal || 'balcao', qtdAnexos: r.qtd_anexos ?? null,
   };
+}
+export { mapDoc, mapReq, ABERTOS };
+
+/**
+ * Protocola um requerimento (balcão ou Portal do Cidadão): numeração
+ * transacional, prazo pelo assunto, anexos e auditoria na mesma transação.
+ */
+export async function protocolarRequerimento({ municipio, tipo, documentoTipo = '', requerenteNome, requerenteDoc, requerenteEmail = '', requerenteTelefone = '',
+  inscricao = '', imovelId = null, descricao = '', dados = {}, prazo = null, responsavelNome = '', usuario = '', canal = 'balcao', anexos = [] }) {
+  const t = TIPOS_REQ[tipo];
+  if (!t) throw erro(400, 'Tipo de requerimento inválido.');
+  if (!String(requerenteNome || '').trim()) throw erro(400, 'Informe o nome do requerente.');
+  const doc = normalizarNi(requerenteDoc);
+  if (!niValido(doc)) throw erro(400, 'Informe um CPF/CNPJ válido do requerente (CNPJ alfanumérico aceito).');
+  if (tipo === 'certidao' && !TIPOS_DOC[documentoTipo]) throw erro(400, 'Escolha qual certidão/declaração está sendo requerida.');
+  inscricao = String(inscricao || '').trim();
+  if (!imovelId && inscricao) {
+    const im = (await query('SELECT id FROM imoveis WHERE municipio = $1 AND inscricao = $2', [municipio, inscricao])).rows[0];
+    imovelId = im?.id || null;
+    if (!imovelId && !['inclusao_imovel', 'outro', 'vistoria'].includes(tipo)) throw erro(404, `Inscrição ${inscricao} não encontrada no cadastro.`);
+  }
+  const prazoFinal = prazo || new Date(Date.now() + t.prazoDias * 86400000).toISOString().slice(0, 10);
+  return withTransaction(async (db) => {
+    const ano = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Recife', year: 'numeric' }).format(new Date()));
+    const n = await proximoNumero(db, 'protocolo', municipio, ano);
+    const numero = `${ano}/${String(n).padStart(5, '0')}`;
+    const { rows } = await db.query(
+      `INSERT INTO requerimentos (municipio, numero, tipo, documento_tipo, requerente_nome, requerente_doc, requerente_email, requerente_telefone,
+         imovel_id, inscricao, descricao, dados, prazo, responsavel_nome, historico, canal)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15::jsonb,$16) RETURNING *`,
+      [municipio, numero, tipo, tipo === 'certidao' ? documentoTipo : (t.documento || ''), String(requerenteNome).trim().slice(0, 160), doc,
+        String(requerenteEmail || '').slice(0, 160), String(requerenteTelefone || '').slice(0, 40), imovelId, inscricao,
+        String(descricao || '').slice(0, 4000), JSON.stringify(dados || {}), prazoFinal, String(responsavelNome || '').slice(0, 80),
+        JSON.stringify([{ em: new Date().toISOString(), status: 'protocolado', por: usuario, obs: canal === 'portal' ? 'Protocolado pelo Portal do Cidadão' : 'Requerimento protocolado' }]), canal]
+    );
+    const salvos = await salvarAnexos(db, rows[0].id, anexos, { por: canal === 'portal' ? `${rows[0].requerente_nome} (portal)` : usuario, canal });
+    await auditar(db, { municipio, entidade: 'requerimento', entidadeId: rows[0].id, acao: 'protocolar',
+      detalhe: `${numero} · ${t.label} · ${rows[0].requerente_nome}${canal === 'portal' ? ' · Portal do Cidadão' : ''}${salvos.length ? ` · ${salvos.length} anexo(s)` : ''}`, usuario });
+    return { ...rows[0], qtd_anexos: salvos.length };
+  });
 }
 
 async function carregarDoc(id) {
@@ -299,7 +341,8 @@ documentosRouter.get('/api/requerimentos', asyncRoute(async (req, res) => {
     const p = '$' + params.length;
     where.push(`(numero ILIKE ${p} OR requerente_nome ILIKE ${p} OR inscricao ILIKE ${p})`);
   }
-  const { rows } = await query(`SELECT * FROM requerimentos WHERE ${where.join(' AND ')} ORDER BY (status = ANY('{protocolado,em_analise,pendente_documentacao}')) DESC, prazo NULLS LAST, id DESC LIMIT 500`, params);
+  const { rows } = await query(`SELECT *, (SELECT count(*) FROM requerimento_anexos a WHERE a.requerimento_id = requerimentos.id)::int AS qtd_anexos
+    FROM requerimentos WHERE ${where.join(' AND ')} ORDER BY (status = ANY('{protocolado,em_analise,pendente_documentacao}')) DESC, prazo NULLS LAST, id DESC LIMIT 500`, params);
   res.json(rows.map(mapReq));
 }));
 
@@ -333,38 +376,40 @@ documentosRouter.get('/api/requerimentos/:id', asyncRoute(async (req, res) => {
 
 documentosRouter.post('/api/requerimentos', asyncRoute(async (req, res) => {
   const b = req.body || {};
-  const m = muniDe(req);
-  const t = TIPOS_REQ[b.tipo];
-  if (!t) throw erro(400, 'Tipo de requerimento inválido.');
-  if (!String(b.requerenteNome || '').trim()) throw erro(400, 'Informe o nome do requerente.');
-  const doc = normalizarNi(b.requerenteDoc);
-  if (!niValido(doc)) throw erro(400, 'Informe um CPF/CNPJ válido do requerente (CNPJ alfanumérico aceito).');
-  if (b.tipo === 'certidao' && !TIPOS_DOC[b.documentoTipo]) throw erro(400, 'Escolha qual certidão/declaração está sendo requerida.');
-  let imovelId = null, inscricao = String(b.inscricao || '').trim();
-  if (inscricao) {
-    const im = (await query('SELECT id FROM imoveis WHERE municipio = $1 AND inscricao = $2', [m, inscricao])).rows[0];
-    imovelId = im?.id || null;
-    if (!imovelId && !['inclusao_imovel', 'outro', 'vistoria'].includes(b.tipo)) throw erro(404, `Inscrição ${inscricao} não encontrada no cadastro.`);
-  }
-  const prazo = b.prazo || new Date(Date.now() + t.prazoDias * 86400000).toISOString().slice(0, 10);
-  const usuario = nomeUsuario(req);
-  const r = await withTransaction(async (db) => {
-    const ano = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Recife', year: 'numeric' }).format(new Date()));
-    const n = await proximoNumero(db, 'protocolo', m, ano);
-    const numero = `${ano}/${String(n).padStart(5, '0')}`;
-    const { rows } = await db.query(
-      `INSERT INTO requerimentos (municipio, numero, tipo, documento_tipo, requerente_nome, requerente_doc, requerente_email, requerente_telefone,
-         imovel_id, inscricao, descricao, dados, prazo, responsavel_nome, historico)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15::jsonb) RETURNING *`,
-      [m, numero, b.tipo, b.tipo === 'certidao' ? b.documentoTipo : (t.documento || ''), String(b.requerenteNome).trim().slice(0, 160), doc,
-        String(b.requerenteEmail || '').slice(0, 160), String(b.requerenteTelefone || '').slice(0, 40), imovelId, inscricao,
-        String(b.descricao || '').slice(0, 4000), JSON.stringify(b.dados || {}), prazo, String(b.responsavelNome || '').slice(0, 80),
-        JSON.stringify([{ em: new Date().toISOString(), status: 'protocolado', por: usuario, obs: 'Requerimento protocolado' }])]
-    );
-    await auditar(db, { municipio: m, entidade: 'requerimento', entidadeId: rows[0].id, acao: 'protocolar', detalhe: `${numero} · ${t.label} · ${rows[0].requerente_nome}`, usuario });
-    return rows[0];
+  const r = await protocolarRequerimento({
+    municipio: muniDe(req), tipo: b.tipo, documentoTipo: b.documentoTipo, requerenteNome: b.requerenteNome, requerenteDoc: b.requerenteDoc,
+    requerenteEmail: b.requerenteEmail, requerenteTelefone: b.requerenteTelefone, inscricao: b.inscricao, descricao: b.descricao, dados: b.dados,
+    prazo: b.prazo, responsavelNome: b.responsavelNome, usuario: nomeUsuario(req), canal: 'balcao', anexos: validarAnexos(b.anexos),
   });
   res.json(mapReq(r));
+}));
+
+// Anexos (documentos pessoais do requerente: o acesso fica no registro LGPD).
+documentosRouter.get('/api/requerimentos/:id/anexos', asyncRoute(async (req, res) => {
+  const r = (await query('SELECT id FROM requerimentos WHERE id = $1 AND municipio = $2', [req.params.id, muniDe(req)])).rows[0];
+  if (!r) throw erro(404, 'Requerimento não encontrado.');
+  res.json(await listarAnexos({ query }, r.id));
+}));
+documentosRouter.get('/api/requerimentos/:id/anexos/:aid', asyncRoute(async (req, res) => {
+  if (AUTH_ENABLED && !PERFIS_DADOS_PESSOAIS.includes(req.user?.role)) throw erro(403, 'Anexos do requerente: perfil sem acesso a documentos pessoais.');
+  const a = (await query(`SELECT a.*, r.municipio, r.numero FROM requerimento_anexos a JOIN requerimentos r ON r.id = a.requerimento_id
+    WHERE a.id = $1 AND a.requerimento_id = $2 AND r.municipio = $3`, [req.params.aid, req.params.id, muniDe(req)])).rows[0];
+  if (!a) throw erro(404, 'Anexo não encontrado.');
+  await registrarAcesso(req, { municipio: a.municipio, entidade: 'requerimento', entidadeId: Number(req.params.id), dado: `anexo "${a.nome}" (protocolo ${a.numero})`, finalidade: 'análise do requerimento' });
+  enviarAnexo(res, a);
+}));
+documentosRouter.post('/api/requerimentos/:id/anexos', asyncRoute(async (req, res) => {
+  const r = (await query('SELECT id, municipio, numero FROM requerimentos WHERE id = $1 AND municipio = $2', [req.params.id, muniDe(req)])).rows[0];
+  if (!r) throw erro(404, 'Requerimento não encontrado.');
+  const arquivos = validarAnexos(req.body?.anexos);
+  if (!arquivos.length) throw erro(400, 'Nenhum arquivo enviado.');
+  const usuario = nomeUsuario(req);
+  const salvos = await withTransaction(async (db) => {
+    const s = await salvarAnexos(db, r.id, arquivos, { por: usuario, canal: 'balcao' });
+    await auditar(db, { municipio: r.municipio, entidade: 'requerimento', entidadeId: r.id, acao: 'anexar', detalhe: `${r.numero}: ${s.map((x) => x.nome).join(', ')}`, usuario });
+    return s;
+  });
+  res.json(salvos);
 }));
 
 // Tramitacao: analisar, pendenciar, deferir (dispara o efeito), indeferir, concluir, arquivar.

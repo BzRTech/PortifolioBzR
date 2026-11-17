@@ -31,6 +31,7 @@ import { lgpdRouter } from './src/lgpd.js';
 import { documentosRouter } from './src/documentos.js';
 import { apiExternaRouter } from './src/api-externa.js';
 import { ssoRouter } from './src/sso.js';
+import { cidadaoRouter } from './src/cidadao.js';
 import { limitar } from './src/ratelimit.js';
 
 // ---- Travas de ambiente (antes de qualquer coisa) -------------------------
@@ -71,6 +72,7 @@ const ROTAS_MODULO = {
   os: { paginas: ['/os'], api: ['/api/ordens', '/api/proximo-numero', '/api/ping', '/api/diagnostico'] },
   waze: { paginas: ['/os/dashboard-waze'], api: ['/api/waze'] },
   api: { paginas: ['/api-externa', '/api-externa.html'], api: ['/api/externa'] },
+  portal: { paginas: ['/cidadao'], api: ['/api/cidadao'] },
 };
 const comeca = (p, prefixos) => prefixos.some((x) => p === x || p.startsWith(x + '/') || p.startsWith(x + '.') || p.startsWith(x + '?'));
 app.use((req, res, next) => {
@@ -114,6 +116,7 @@ app.use(['/api/import/:layer'], requireRole('admin', 'coordenador', 'tecnico'));
 app.use(documentosRouter); // /api/publico/* (validação), /api/documentos, /api/requerimentos
 app.use(authRouter);       // /api/auth/*, /api/usuarios
 app.use(ssoRouter);        // /api/instancias, /api/sso/emitir, /api/auth/sso (troca de município)
+app.use(cidadaoRouter);    // /api/cidadao/* (Portal do Cidadão: sessão própria, sem login da equipe)
 app.use(apiExternaRouter); // /api/externa/v1/* (parceiros, com chave) e /api/externa/chaves (admin)
 app.use(demandasRouter);   // /api/demandas/*
 app.use(bciRouter);        // /api/bci/*

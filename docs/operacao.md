@@ -69,3 +69,10 @@ Para trocar o `SSO_SECRET` (por exemplo, se vazar), mude o valor em todas as ins
 - O escopo `pessoais` (nome e CPF/CNPJ) exige a finalidade com a base legal e validade de até 1 ano. Cada chamada entra no registro LGPD.
 - Toda chamada fica em `api_acessos` (somente inserção). Chaves não se apagam; revogue-as.
 - Documentação para o parceiro: `https://<instância>/api-externa`. Para desligar o recurso, tire `api` de `MODULOS`.
+
+## Portal do Cidadão
+
+- Ligue `portal` em `MODULOS` e escolha as entradas em `PORTAL_ENTRADA`. Prefira gov.br, com `GOVBR_CLIENT_ID` e `GOVBR_CLIENT_SECRET` do credenciamento da prefeitura, e código por e-mail, com `SMTP_URL`. Sem SMTP, a entrada por e-mail fica desligada em produção.
+- URL de retorno a cadastrar no gov.br: `<PUBLIC_BASE_URL>/api/cidadao/govbr/retorno`. Teste primeiro com `GOVBR_AMBIENTE=homologacao`.
+- Para que o cidadão encontre os seus imóveis, o CPF/CNPJ do contribuinte precisa estar correto no cadastro. O raio-x da Implantação aponta os CPFs inválidos ou ausentes. Para a entrada por e-mail, importe também o e-mail do contribuinte.
+- Detalhes e modelo de segurança: [`docs/portal-cidadao.md`](portal-cidadao.md).

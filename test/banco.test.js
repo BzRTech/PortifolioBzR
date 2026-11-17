@@ -142,3 +142,22 @@ test('PGV: publicar exercício não altera certidão já emitida', { skip: pular
   assert.notEqual(novo.v, antes);
   await assert.rejects(pgv.publicarExercicio(M, 2030, {}), /já está/);
 });
+
+test('portal: documento do cidadão guarda canal/solicitante, imutável; requerimento com anexos somente-inserção', { skip: pular }, async () => {
+  const im = (await db.query(`SELECT id FROM imoveis WHERE municipio = $1 LIMIT 1`, [M])).rows[0];
+  const d = await docs.emitirDocumento({ municipio: M, tipo: 'certidao_cadastral', imovelId: im.id, usuario: 'Portal do Cidadão', canal: 'portal', solicitanteDoc: '529.982.247-25' });
+  assert.equal(d.canal, 'portal');
+  assert.equal(d.solicitante_doc, '52998224725');
+  await assert.rejects(db.query(`UPDATE documentos SET solicitante_doc = '11144477735' WHERE id = $1`, [d.id]), /imutável/);
+  await assert.rejects(db.query(`UPDATE documentos SET canal = 'interno' WHERE id = $1`, [d.id]), /imutável/);
+  const { validarAnexos } = await import('../src/anexos.js');
+  const pdf = Buffer.from('%PDF-1.4\n%%EOF').toString('base64');
+  const r = await docs.protocolarRequerimento({ municipio: M, tipo: 'revisao_cadastral', requerenteNome: 'Fulano', requerenteDoc: '52998224725', imovelId: im.id,
+    descricao: 'teste do portal', usuario: 't', canal: 'portal', anexos: validarAnexos([{ nome: 'a.pdf', base64: pdf }]) });
+  assert.equal(r.canal, 'portal');
+  assert.equal(r.qtd_anexos, 1);
+  const a = (await db.query('SELECT id, tipo_mime FROM requerimento_anexos WHERE requerimento_id = $1', [r.id])).rows[0];
+  assert.equal(a.tipo_mime, 'application/pdf');
+  await assert.rejects(db.query(`UPDATE requerimento_anexos SET nome = 'x' WHERE id = $1`, [a.id]), /somente-inserção/);
+  await assert.rejects(db.query(`DELETE FROM requerimento_anexos WHERE id = $1`, [a.id]), /somente-inserção/);
+});

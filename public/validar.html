@@ -26,7 +26,7 @@
   <header class="topbar">
     <a class="brand" href="/" style="text-decoration:none;color:inherit"><img class="logo-img" src="/assets/bzr-mark.svg" alt="BzR" />
       <div class="brand-text"><strong>Validação de <span class="brand-accent">documentos</span></strong><small>Cadastro imobiliário municipal</small></div></a>
-    <div class="top-actions"><button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button></div>
+    <div class="top-actions"><a class="btn" href="/cidadao" title="Seus imóveis, documentos e solicitações">🏠 <span class="btn-label">Portal do Cidadão</span></a><button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button></div>
   </header>
   <main class="pub">
     <div class="subtabs" id="st"><button class="on" data-s="doc">Validar documento</button><button data-s="prot">Consultar protocolo</button></div>
@@ -87,6 +87,7 @@
     const qs = new URLSearchParams(location.search);
     if (qs.get('codigo')) { document.getElementById('codigo').value = qs.get('codigo'); validar(qs.get('codigo')); }
     if (qs.get('protocolo')) { aba('prot'); document.getElementById('numero').value = qs.get('protocolo'); }
+    if (location.hash === '#protocolo') aba('prot');
   </script>
 </body>
 </html>

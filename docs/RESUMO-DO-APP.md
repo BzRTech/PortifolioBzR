@@ -97,6 +97,14 @@ tarefas, ordens de serviço, atendimento ao cidadão e emissão de certidões e 
 
 **Validação pública (`/validar`):** mostra se o documento é autêntico, íntegro, válido ou cancelado; exibe a versão com CPF/CNPJ mascarado (LGPD) e permite consultar o protocolo pelo número + CPF/CNPJ do requerente.
 
+**Portal do Cidadão (`/cidadao`)** — feito para o celular:
+- **Entrar:** CPF/CNPJ + uma segunda prova — gov.br, código de 6 dígitos enviado ao e-mail que já está no cadastro, ou a inscrição de um dos imóveis (carnê do IPTU). A prefeitura escolhe quais aceita.
+- **Meus imóveis:** inscrição, endereço, CIB, áreas, valor venal e matrícula de cada imóvel no CPF/CNPJ.
+- **Emitir na hora:** certidão de dados cadastrais, situação cadastral, valor venal, numeração predial, declaração do CIB e certidão de baixa — com número, QR e validação, como os emitidos no balcão. Quando um documento não pode sair (ex.: ainda sem CIB), o portal diz por quê.
+- **Solicitações:** atualização cadastral, transferência (ITBI), desmembramento, baixa, reativação, numeração predial, vistoria, inclusão de imóvel, certidões que exigem análise e outros — com anexos (PDF/JPG/PNG) e protocolo na hora.
+- **Acompanhar:** andamento de cada protocolo, o que a prefeitura pediu ("Aguardando seus documentos") com envio de anexos pelo próprio portal, comprovante e o documento emitido no deferimento.
+- **Na prefeitura:** as solicitações caem no Atendimento marcadas como 🌐 portal, com os anexos (abrir um anexo entra no registro LGPD); a equipe também pode anexar documentos digitalizados no balcão.
+
 ---
 
 ## 5. Como os módulos conversam
@@ -181,7 +189,8 @@ npm start                   # http://localhost:3000
 | `SEED_DEMO`, `SEED_CIB_DEMO`, `SEED_BCI_DEMO`, `SEED_DEMANDAS_DEMO`, `SEED_OS_DEMO` | Carregar demonstrações no boot |
 | `PUBLIC_BASE_URL` | Endereço usado no QR de validação dos documentos |
 | `INSTANCIAS`, `SSO_SECRET` | Troca de município pelo seletor do topo (outras prefeituras da equipe); troca sem nova senha |
-| `MODULOS` | Pacote contratado (inclui `api` para o acesso externo) |
+| `MODULOS` | Pacote contratado (inclui `api` para o acesso externo e `portal` para o Portal do Cidadão) |
+| `PORTAL_ENTRADA`, `PORTAL_DOCUMENTOS`, `GOVBR_*`, `SMTP_URL` | Portal do Cidadão: formas de entrada, documentos de autoatendimento, gov.br e e-mail do código |
 | `SINTER_API_URL`, `SINTER_API_TOKEN` | Envio de remessas por API (opcional) |
 | `CIB_SIMULAR_RETORNO` | Botão "Simular retorno" — **só para demonstração** |
 | `CIB_PRAZO_SINTER`, `CIB_CAPACIDADE_SEMANAL` | Prazo padrão e base da estimativa do diagnóstico |
@@ -193,6 +202,7 @@ npm start                   # http://localhost:3000
 
 - **Um deploy e um banco por prefeitura** (`MUNICIPIO` trava a instância) — `docs/adr/0001-um-deploy-por-prefeitura.md`.
 - **Vários municípios:** o seletor do topo leva à instância da outra prefeitura (`INSTANCIAS`). Com `SSO_SECRET`, a troca usa um ticket assinado de 60 s, uso único, só para o destino escolhido; o usuário precisa estar ativo lá e entra com o perfil de lá — `docs/adr/0002-troca-de-municipio.md`.
+- **Portal do Cidadão:** CPF/CNPJ + segunda prova (gov.br OIDC com PKCE, código de 6 dígitos no e-mail do cadastro, ou inscrição do carnê); sessão própria de 30 min que não vale nas APIs da equipe; respostas que não revelam se um CPF tem imóvel; limites de tentativas; documentos e anexos imutáveis; cada acesso no registro LGPD — `docs/portal-cidadao.md`.
 - **Acesso externo:** API somente leitura `/api/externa/v1` (lotes, imóveis) em JSON/GeoJSON/CSV, chave por parceiro (só o hash fica no banco), escopos, limite por minuto, IPs, validade, revogação e registro de cada chamada. Dados pessoais só com finalidade e validade de até 1 ano, e com registro LGPD.
 - **Travas de produção** (`NODE_ENV=production`): sem login, com segredo fraco, sem `MUNICIPIO`/`PUBLIC_BASE_URL` ou com flag de demonstração, o servidor não sobe.
 - **Integridade:** documentos, auditoria, acessos LGPD e arquivos de remessa são imutáveis no banco (trigger); hash SHA-256 sobre JCS (RFC 8785); numeração transacional.

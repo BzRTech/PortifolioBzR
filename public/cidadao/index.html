@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/assets/marca/favicon.svg" type="image/svg+xml" />
+  <title>Portal do Cidadão — imóveis, documentos e solicitações</title>
+  <meta name="description" content="Veja os imóveis cadastrados no seu CPF, emita certidões e declarações na hora e faça solicitações à prefeitura." />
+  <script>try{var _t=localStorage.getItem('bzr-theme');if(_t)document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/gestao.css" />
+  <link rel="stylesheet" href="/cidadao/cidadao.css" />
+</head>
+<body class="gestao cid">
+  <header class="topbar">
+    <a class="brand" href="/cidadao" style="text-decoration:none;color:inherit"><img class="logo-img" src="/assets/bzr-mark.svg" alt="" />
+      <div class="brand-text"><strong>Portal do <span class="brand-accent">Cidadão</span></strong><small id="orgao">Cadastro imobiliário municipal</small></div></a>
+    <div class="top-actions">
+      <span class="sessao" id="sessao" hidden></span>
+      <button class="btn" id="sair" hidden>Sair</button>
+      <button class="btn" data-theme-toggle onclick="BzrTheme.toggle()" title="Modo escuro" aria-label="Alternar tema" style="padding:9px 11px;font-size:15px;line-height:1">🌙</button>
+    </div>
+  </header>
+  <main class="cid-wrap" id="app"><div class="vazio">Carregando…</div></main>
+  <footer class="cid-rodape" id="rodape"></footer>
+  <script src="/js/theme.js"></script>
+  <script src="/cidadao/app.js"></script>
+</body>
+</html>

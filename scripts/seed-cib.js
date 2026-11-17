@@ -21,7 +21,7 @@ import { processarImoveis, capturarMovimentacao, validarMovimentacao, recalcular
 import { prepararRemessa, enviarRemessa, processarRetorno, gerarRetornoSimulado } from '../src/cib-remessas.js';
 import { parseRetorno } from '../src/sinter/retorno.js';
 import { publicarExercicio } from '../src/pgv.js';
-import { emitirDocumento } from '../src/documentos.js';
+import { emitirDocumento, protocolarRequerimento } from '../src/documentos.js';
 import { dvCnpj, dvCnm } from '../src/ni.js';
 import { seedDemo } from './seed-demo.js';
 
@@ -303,9 +303,39 @@ export async function seedCibDemo({ truncate = false, log = () => {} } = {}) {
   await emitirDocumento({ municipio: MUNI, tipo: 'oficio_adesao_sinter', campos: { destinatario: 'Ao(À) Senhor(a) Delegado(a) da Receita Federal do Brasil', unidadeRfb: 'Delegacia da Receita Federal do Brasil em João Pessoa/PB' }, usuario: EQUIPE });
   log(`  atendimento: ${nReq} requerimentos e documentos emitidos.`);
 
+  await semearCidadaoDemo({ log });
+
   const fim = (await query(`SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE cib <> '')::int AS cib FROM imoveis WHERE municipio = $1`, [MUNI])).rows[0];
   log(`  pronto: ${fim.n} imóveis, ${fim.cib} com CIB (SIMULADO — demonstração).`);
   return fim;
+}
+
+// Munícipe de DEMONSTRAÇÃO do Portal do Cidadão (dados fictícios): três imóveis
+// (um com CIB, um terreno, um ainda sem CIB), e-mail para o código de acesso e
+// duas solicitações feitas pelo portal.
+export const CIDADAO_DEMO = { cpf: '52998224725', nome: 'Maria do Carmo Exemplo', email: 'maria.exemplo@exemplo.invalid' };
+export async function semearCidadaoDemo({ log = () => {} } = {}) {
+  const { cpf, nome, email } = CIDADAO_DEMO;
+  if ((await query('SELECT 1 FROM imoveis WHERE municipio = $1 AND contribuinte_doc = $2', [MUNI, cpf])).rows.length) return log('  portal: cidadão de demonstração já existe.');
+  const pega = async (sql) => (await query(`SELECT id, inscricao FROM imoveis WHERE municipio = $1 AND contribuinte_doc <> $2 AND ${sql} ORDER BY id LIMIT 1`, [MUNI, cpf])).rows[0];
+  const casa = await pega(`tipo = 'predial' AND cib <> '' AND NOT tem_erro AND numero <> 'S/N' AND logradouro <> '' AND valor_venal_total IS NOT NULL AND situacao = 'ativo'`);
+  const terreno = await pega(`tipo = 'territorial' AND situacao = 'ativo' AND id <> ${Number(casa?.id) || 0}`);
+  const semCib = await pega(`cib = '' AND situacao = 'ativo' AND id NOT IN (${Number(casa?.id) || 0}, ${Number(terreno?.id) || 0})`);
+  const meus = [casa, terreno, semCib].filter(Boolean);
+  for (const im of meus) {
+    await query(`UPDATE imoveis SET contribuinte_nome = $2, contribuinte_doc = $3, contribuinte_email = $4, contribuinte_telefone = '(83) 90000-0000', updated_at = now() WHERE id = $1`, [im.id, nome, cpf, email]);
+  }
+  if (casa) {
+    await protocolarRequerimento({ municipio: MUNI, tipo: 'revisao_cadastral', requerenteNome: nome, requerenteDoc: cpf, requerenteEmail: email, imovelId: casa.id, inscricao: casa.inscricao,
+      descricao: 'Construí uma varanda nos fundos (cerca de 18 m²). Peço a atualização da área construída.', usuario: `${nome} (Portal do Cidadão)`, canal: 'portal' });
+  }
+  if (semCib) {
+    const r = await protocolarRequerimento({ municipio: MUNI, tipo: 'transferencia', requerenteNome: nome, requerenteDoc: cpf, requerenteEmail: email, imovelId: semCib.id, inscricao: semCib.inscricao,
+      descricao: 'Comprei este imóvel em outubro. Peço a transferência para o meu nome.', usuario: `${nome} (Portal do Cidadão)`, canal: 'portal' });
+    const hist = [...r.historico, { em: new Date().toISOString(), status: 'pendente_documentacao', por: 'Atendimento (demo)', obs: 'Envie a escritura registrada e a guia do ITBI quitada.' }];
+    await query(`UPDATE requerimentos SET status = 'pendente_documentacao', parecer = 'Envie a escritura registrada e a guia do ITBI quitada.', historico = $2::jsonb WHERE id = $1`, [r.id, JSON.stringify(hist)]);
+  }
+  log(`  portal: cidadão de demonstração ${nome} (CPF 529.982.247-25) com ${meus.length} imóveis.`);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
@@ -315,7 +345,8 @@ if (isMain) {
     if (PRODUCAO) { console.error('Seed de demonstração bloqueado em produção (NODE_ENV=production).'); process.exit(1); }
     try {
       console.log(`Carregando o cadastro de demonstração (CIB/Sinter) em "${MUNI}"...`);
-      await seedCibDemo({ truncate: process.argv.includes('--truncate'), log: console.log });
+      if (process.argv.includes('--cidadao')) await semearCidadaoDemo({ log: console.log }); // só o munícipe do portal, num banco já semeado
+      else await seedCibDemo({ truncate: process.argv.includes('--truncate'), log: console.log });
       console.log('Concluído. Abra /cib/ e /documentos/.');
     } catch (e) { console.error('Erro:', e.message, e.stack); process.exitCode = 1; }
     finally { await closePool(); }
