@@ -4,16 +4,20 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Instala as dependencias primeiro (aproveita cache de camadas).
-# Todas as deps sao de producao (express, cors, dotenv, pg).
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev
 
-# Copia o restante do codigo (front, API, scripts).
+# Copia o restante do codigo (front, API, migrations, scripts).
 COPY . .
 
-ENV NODE_ENV=production
+# NODE_ENV NAO e fixado aqui: cada servico define o seu no Render.
+#  - vitrine/demonstracao (portifoliobzr.onrender.com): NODE_ENV=demo (ou vazio),
+#    pode usar SEED_*_DEMO e CIB_SIMULAR_RETORNO;
+#  - prefeitura com dados reais: NODE_ENV=production — o boot FALHA sem login,
+#    AUTH_SECRET forte, MUNICIPIO e PUBLIC_BASE_URL (src/env.js, docs/operacao.md).
 # Documental: o Render fornece a porta real via $PORT; o server usa process.env.PORT.
 EXPOSE 3000
 
-# Sobe o servidor (cria o schema PostGIS no boot e, se SEED_DEMO=true, popula o demo).
+# Sobe o servidor: aplica as migrations pendentes no boot e, fora de producao,
+# carrega as demonstracoes ligadas (SEED_*_DEMO=true).
 CMD ["npm", "start"]
