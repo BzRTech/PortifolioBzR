@@ -29,6 +29,8 @@ import { pgvRouter } from './src/pgv.js';
 import { importacaoRouter } from './src/importacao.js';
 import { lgpdRouter } from './src/lgpd.js';
 import { documentosRouter } from './src/documentos.js';
+import { apiExternaRouter } from './src/api-externa.js';
+import { ssoRouter } from './src/sso.js';
 import { limitar } from './src/ratelimit.js';
 
 // ---- Travas de ambiente (antes de qualquer coisa) -------------------------
@@ -51,7 +53,10 @@ const IMPORT_TOKEN = process.env.IMPORT_TOKEN || '';
 const app = express();
 app.set('trust proxy', 1); // Render/Neon: IP real do cliente para o rate limit e a auditoria LGPD
 app.disable('x-powered-by');
-app.use(cors(PRODUCAO ? { origin: process.env.PUBLIC_BASE_URL } : undefined));
+// CORS: a API externa (com chave, sem cookies) aceita qualquer origem e trata o
+// próprio CORS; o restante só a origem da instância em produção.
+const corsInstancia = cors(PRODUCAO ? { origin: process.env.PUBLIC_BASE_URL } : undefined);
+app.use((req, res, next) => (req.path.startsWith('/api/externa/v1') ? next() : corsInstancia(req, res, next)));
 // Limite generoso: importação de GeoJSON em lote e fotos das O.S. (base64).
 app.use(express.json({ limit: '25mb' }));
 
@@ -65,6 +70,7 @@ const ROTAS_MODULO = {
   demandas: { paginas: ['/demandas'], api: ['/api/demandas'] },
   os: { paginas: ['/os'], api: ['/api/ordens', '/api/proximo-numero', '/api/ping', '/api/diagnostico'] },
   waze: { paginas: ['/os/dashboard-waze'], api: ['/api/waze'] },
+  api: { paginas: ['/api-externa', '/api-externa.html'], api: ['/api/externa'] },
 };
 const comeca = (p, prefixos) => prefixos.some((x) => p === x || p.startsWith(x + '/') || p.startsWith(x + '.') || p.startsWith(x + '?'));
 app.use((req, res, next) => {
@@ -94,7 +100,7 @@ app.get(['/cadastro', '/sinter'], (req, res) => res.redirect(302, '/cib/'));
 
 // ---- Segurança da API -----------------------------------------------------
 // Força bruta no login: 10 tentativas / 15 min por IP+e-mail.
-app.post('/api/auth/login', limitar({ nome: 'login', janelaMs: 15 * 60000, max: 10, chave: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}` }));
+app.post(['/api/auth/login'], limitar({ nome: 'login', janelaMs: 15 * 60000, max: 10, chave: (req) => `${req.ip}|${String(req.body?.email || '').toLowerCase()}` }));
 // Perfil gestor é somente leitura em toda a API.
 app.use('/api', bloquearEscritaGestor);
 // Login nas APIs do Território e das O.S. (antes ficavam abertas). Rotas públicas:
@@ -107,6 +113,8 @@ app.use(['/api/import/:layer'], requireRole('admin', 'coordenador', 'tecnico'));
 // ---- Módulos ---------------------------------------------------------------
 app.use(documentosRouter); // /api/publico/* (validação), /api/documentos, /api/requerimentos
 app.use(authRouter);       // /api/auth/*, /api/usuarios
+app.use(ssoRouter);        // /api/instancias, /api/sso/emitir, /api/auth/sso (troca de município)
+app.use(apiExternaRouter); // /api/externa/v1/* (parceiros, com chave) e /api/externa/chaves (admin)
 app.use(demandasRouter);   // /api/demandas/*
 app.use(bciRouter);        // /api/bci/*
 app.use(cibRouter);        // /api/cib/* (imóveis, ciclo mensal, implantação, vistoria, auditoria)

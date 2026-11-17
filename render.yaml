@@ -34,9 +34,16 @@ services:
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
-      # Pacote contratado: territorio, cib, documentos, bci, demandas, os, waze
+      # Pacote contratado: territorio, cib, documentos, bci, demandas, os, waze, api
       - key: MODULOS
-        value: "cib,documentos,territorio,bci,demandas"
+        value: "cib,documentos,territorio,bci,demandas,api"
+      # Troca de município (opcional): outras prefeituras da mesma equipe, cada uma no seu deploy.
+      # Ex.: "Patos=https://patos.bzr.app.br; Sousa=https://sousa.bzr.app.br"
+      - key: INSTANCIAS
+        sync: false
+      # Mesmo valor em todas as instâncias da lista (troca sem nova senha). Vazio = pede login.
+      - key: SSO_SECRET
+        sync: false
       # API do Sinter (credenciais do convênio). Sem elas, envio em lote (arquivo + idArquivo).
       - key: SINTER_AMBIENTE
         value: teste

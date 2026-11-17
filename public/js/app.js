@@ -182,6 +182,15 @@ async function setupMunicipios() {
     els.filtroMunicipio.innerHTML = municipios.map((m) => `<option value="${m}">${m}</option>`).join('');
     els.filtroMunicipio.value = currentMunicipio;
     els.campoMunicipio.hidden = false;
+    // Instância travada num município: o seletor troca de prefeitura (outro deploy).
+    if (window.BzrInstancias) {
+      const inst = await window.BzrInstancias.carregar();
+      if (inst?.atual?.municipio) {
+        els.filtroMunicipio.removeEventListener('change', applyMunicipio);
+        await window.BzrInstancias.montar(els.filtroMunicipio, inst);
+        if (!inst.outras?.length) els.campoMunicipio.hidden = true;
+      }
+    }
   } else {
     els.campoMunicipio.hidden = true;
     currentMunicipio = '';

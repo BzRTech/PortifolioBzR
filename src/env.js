@@ -12,7 +12,7 @@ export const PRODUCAO = process.env.NODE_ENV === 'production';
 const SEGREDOS_FRACOS = new Set(['', 'troque-por-um-segredo-longo-e-aleatorio', 'bzr-dev-secret-troque-em-producao', 'changeme', 'secret']);
 const SENHAS_FRACAS = new Set(['', 'bzr1234', 'admin', '123456', '12345678', 'senha', 'password']);
 const FLAGS_DEMO = ['CIB_SIMULAR_RETORNO', 'SEED_DEMO', 'SEED_OS_DEMO', 'SEED_DEMANDAS_DEMO', 'SEED_BCI_DEMO', 'SEED_CIB_DEMO'];
-export const MODULOS_TODOS = ['territorio', 'cib', 'documentos', 'bci', 'demandas', 'os', 'waze'];
+export const MODULOS_TODOS = ['territorio', 'cib', 'documentos', 'bci', 'demandas', 'os', 'waze', 'api'];
 
 const ligado = (v) => String(process.env[v] || '').toLowerCase() === 'true';
 
@@ -51,6 +51,13 @@ export function conferirAmbiente(env = process.env) {
       (prod ? erros : avisos).push(`${f}=true é modo demonstração${prod ? ' e não é permitido em produção (mistura dados fictícios com a base real)' : ''}.`);
     }
   }
+  // Troca de município entre instâncias (docs/adr/0002-troca-de-municipio.md).
+  const insts = lerInstancias(env);
+  if (insts.invalidas.length) problema(`INSTANCIAS: entrada(s) inválida(s): ${insts.invalidas.join(', ')} (use Nome=https://endereço; separado por ponto e vírgula).`);
+  if (prod && insts.lista.some((i) => !i.url.startsWith('https://'))) erros.push('INSTANCIAS: em produção todos os endereços precisam ser https://.');
+  const sso = String(env.SSO_SECRET || '');
+  if (sso && (SEGREDOS_FRACOS.has(sso) || sso.length < 32 || new Set(sso).size < 10)) problema('SSO_SECRET fraco: use 32+ caracteres aleatórios (o mesmo valor em todas as instâncias que trocam entre si).');
+  if (sso && sso === String(env.AUTH_SECRET || '')) problema('SSO_SECRET não pode ser igual ao AUTH_SECRET (o segredo do login é exclusivo de cada instância).');
   if (prod) {
     if (!String(env.MUNICIPIO || '').trim()) erros.push('MUNICIPIO é obrigatório em produção (um deploy por prefeitura).');
     if (!/^https:\/\//.test(String(env.PUBLIC_BASE_URL || ''))) erros.push('PUBLIC_BASE_URL (https://…) é obrigatório em produção: é o endereço impresso no QR dos documentos.');
@@ -66,4 +73,42 @@ export function senhaAdminInicial(env = process.env) {
     throw new Error('ADMIN_PASSWORD fraca ou ausente: em produção o admin inicial exige senha com 12+ caracteres.');
   }
   return s || 'bzr1234';
+}
+
+/** Origem (protocolo://host[:porta]) de uma URL, ou '' se inválida. */
+export function origemDe(url) {
+  try { const u = new URL(String(url || '')); return /^https?:$/.test(u.protocol) ? u.origin : ''; } catch { return ''; }
+}
+
+/**
+ * Instâncias das outras prefeituras atendidas pela mesma equipe:
+ * INSTANCIAS="Patos=https://patos.bzr.app.br; Sousa=https://sousa.bzr.app.br"
+ * (também aceita JSON: [{"municipio":"Patos","url":"https://…"}]).
+ * Cada uma continua com o seu deploy e o seu banco (ADR 0001); a lista só
+ * habilita o seletor de município e, com SSO_SECRET, o login sem senha.
+ */
+export function lerInstancias(env = process.env) {
+  const bruto = String(env.INSTANCIAS || '').trim();
+  const lista = [], invalidas = [];
+  if (!bruto) return { lista, invalidas };
+  let itens = [];
+  if (bruto.startsWith('[')) {
+    try { itens = JSON.parse(bruto).map((x) => [x?.municipio, x?.url]); } catch { invalidas.push('JSON ilegível'); }
+  } else {
+    itens = bruto.split(/[;\n]+/).map((x) => x.trim()).filter(Boolean).map((x) => {
+      const i = x.indexOf('=');
+      return i > 0 ? [x.slice(0, i), x.slice(i + 1)] : [x, ''];
+    });
+  }
+  const propria = origemDe(env.PUBLIC_BASE_URL);
+  for (const [nome, url] of itens) {
+    const municipio = String(nome || '').trim();
+    const origem = origemDe(String(url || '').trim());
+    if (!municipio || !origem) { invalidas.push(municipio || String(url || '?')); continue; }
+    if (origem === propria) continue; // a própria instância não entra na lista
+    if (lista.some((x) => x.url === origem)) continue;
+    lista.push({ municipio, url: origem });
+  }
+  lista.sort((a, b) => a.municipio.localeCompare(b.municipio, 'pt-BR'));
+  return { lista, invalidas };
 }

@@ -14,7 +14,7 @@ Variáveis obrigatórias com `NODE_ENV=production` (sem elas o servidor **não s
 
 Bloqueados em produção: `CIB_SIMULAR_RETORNO`, `SEED_DEMO`, `SEED_OS_DEMO`, `SEED_DEMANDAS_DEMO`, `SEED_BCI_DEMO`, `SEED_CIB_DEMO` (boot falha) e os scripts de seed/`reset-db` (saem com erro). Um ambiente de demonstração usa `NODE_ENV=demo`.
 
-Opcionais: `MODULOS=cib,documentos,territorio` (pacote contratado), `SINTER_AMBIENTE=teste|producao`, `SINTER_CLIENT_ID`, `SINTER_CLIENT_SECRET`, `MAPA_ZOOM_DETALHE`, `MAPA_LIMITE_FEICOES`, `MAPA_MAX_FEICOES`.
+Opcionais: `MODULOS=cib,documentos,territorio,api` (pacote contratado), `INSTANCIAS` e `SSO_SECRET` (troca de município — ver abaixo), `SINTER_AMBIENTE=teste|producao`, `SINTER_CLIENT_ID`, `SINTER_CLIENT_SECRET`, `MAPA_ZOOM_DETALHE`, `MAPA_LIMITE_FEICOES`, `MAPA_MAX_FEICOES`.
 
 ## Banco: migrations
 
@@ -52,3 +52,20 @@ O teste restaura num banco descartável e confere checksum do arquivo, contagem 
 npm test                                   # unidade (validação, leiaute, retorno, ambiente)
 TEST_DATABASE_URL=postgres://…/teste npm test   # + integração com banco descartável
 ```
+
+## Equipe que atende várias prefeituras
+
+Cada prefeitura continua com o seu deploy e o seu banco (ADR 0001). Para trocar de uma para outra pelo seletor do topo:
+
+1. Em **cada** instância, liste as outras em `INSTANCIAS` (ex.: `Patos=https://patos.bzr.app.br; Sousa=https://sousa.bzr.app.br`). A própria pode estar na lista; ela é ignorada.
+2. Opcional: defina o **mesmo** `SSO_SECRET` em todas (32+ caracteres, `openssl rand -hex 32`, diferente do `AUTH_SECRET`). Com ele, a troca não pede senha de novo; sem ele, o navegador vai para o login da outra prefeitura.
+3. Cadastre o usuário (mesmo e-mail) em cada prefeitura em que ele trabalha, com o perfil daquela prefeitura. Quem não está cadastrado no destino é recusado, e a tentativa fica na auditoria.
+
+Para trocar o `SSO_SECRET` (por exemplo, se vazar), mude o valor em todas as instâncias. Os tickets antigos param de valer na hora; as sessões já abertas continuam, porque cada instância tem o seu próprio `AUTH_SECRET`.
+
+## Acesso externo (API de dados por lote)
+
+- O admin cria uma chave por parceiro em CIB/Sinter → **Acesso externo**, com escopos (`lotes`, `cadastro`, `valores`, `pessoais`), limite por minuto, validade e IPs permitidos. A chave aparece **uma vez**: envie-a ao parceiro por canal seguro.
+- O escopo `pessoais` (nome e CPF/CNPJ) exige a finalidade com a base legal e validade de até 1 ano. Cada chamada entra no registro LGPD.
+- Toda chamada fica em `api_acessos` (somente inserção). Chaves não se apagam; revogue-as.
+- Documentação para o parceiro: `https://<instância>/api-externa`. Para desligar o recurso, tire `api` de `MODULOS`.

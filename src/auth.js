@@ -86,7 +86,8 @@ export const requireRole = (...roles) => (req, res, next) => {
 /** Perfil "gestor" é somente leitura: bloqueia qualquer escrita na API. */
 export function bloquearEscritaGestor(req, res, next) {
   if (!AUTH_ENABLED || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  if (req.path === '/api/auth/login') return next();
+  // Entrar e trocar de município não alteram dados.
+  if (['/api/auth/login', '/api/auth/sso', '/api/sso/emitir'].includes(req.originalUrl.split('?')[0])) return next();
   const claims = verificarToken(tokenDaRequest(req));
   if (claims?.role === 'gestor') return res.status(403).json({ error: 'Perfil gestor é somente leitura.' });
   next();

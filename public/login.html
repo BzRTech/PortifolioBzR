@@ -124,12 +124,29 @@
   <script src="/js/theme.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
-    const proximo = params.get('next') || '/cib/';
-    if (localStorage.getItem('bzr_token')) location.replace(proximo);
+    // Só caminhos desta instância (evita redirecionamento para fora).
+    const pedido = params.get('next') || '';
+    const proximo = /^\/(?![\/\\])/.test(pedido) ? pedido : '/cib/';
+    const ticket = params.get('sso');
 
     const f = document.getElementById('form');
     const erro = document.getElementById('erro');
     const btn = document.getElementById('btn');
+
+    if (ticket) {
+      // Chegou pela troca de município: troca o ticket (uso único, 60 s) por uma sessão daqui.
+      history.replaceState(null, '', location.pathname + (pedido ? '?next=' + encodeURIComponent(proximo) : ''));
+      btn.disabled = true; btn.textContent = 'Trocando de município…';
+      fetch('/api/auth/sso', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket }) })
+        .then(async (r) => {
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error || 'Não foi possível trocar de município.');
+          localStorage.setItem('bzr_token', j.token);
+          localStorage.setItem('bzr_user', JSON.stringify(j.user));
+          location.replace(proximo);
+        })
+        .catch((err) => { erro.textContent = err.message + ' Entre com e-mail e senha deste município.'; btn.disabled = false; btn.textContent = 'Entrar'; });
+    } else if (localStorage.getItem('bzr_token')) location.replace(proximo);
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       erro.textContent = '';

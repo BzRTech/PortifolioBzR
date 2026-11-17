@@ -162,6 +162,15 @@
       const sair = G.el('btn-logout'); if (sair) sair.hidden = true;
     }
     const sel = G.el(seletor);
+    // Instância travada num município (produção): o seletor troca de prefeitura (outro deploy).
+    const inst = window.BzrInstancias ? await window.BzrInstancias.carregar() : null;
+    if (inst?.atual?.municipio) {
+      G.municipio = inst.atual.municipio;
+      G.instancias = inst;
+      await window.BzrInstancias.montar(sel, inst);
+      localStorage.setItem(MUNI_KEY, G.municipio);
+      return true;
+    }
     let lista = [];
     try { lista = await G.api('/api/cib/municipios'); } catch (e) { G.falha(e); }
     const salvo = new URLSearchParams(location.search).get('municipio') ?? localStorage.getItem(MUNI_KEY);

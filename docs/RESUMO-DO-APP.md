@@ -60,6 +60,9 @@ tarefas, ordens de serviço, atendimento ao cidadão e emissão de certidões e 
 | **PGV** | Planta Genérica de Valores por **exercício** (rascunho → vigente → encerrado). Publicar recalcula o valor venal da base numa única transação; certidões já emitidas não mudam. |
 | **Município** | Dados da prefeitura usados nos documentos e nas remessas: nome oficial, CNPJ, secretaria, brasão, prefeito, responsável técnico, convênio, prazo e transmissores. |
 | **Auditoria** | Histórico de tudo: importações, edições (antes → depois), validações, remessas, retornos, conciliações, documentos e etapas — com data e responsável. |
+| **Acesso externo** (admin) | Chaves de API por parceiro (cartório, secretarias, Receita Estadual, consórcio) para baixar os dados de cada lote em JSON, GeoJSON ou CSV: escopos, limite por minuto, validade, IPs, revogação e o registro de cada chamada. Documentação para o parceiro em `/api-externa`. |
+
+**Seletor de município (topo):** cada prefeitura tem o seu deploy; quem atende várias troca de prefeitura pelo seletor e cai logado na outra (com `SSO_SECRET`), com o perfil que tem lá.
 
 **Regras de validação para o Sinter**
 
@@ -177,6 +180,8 @@ npm start                   # http://localhost:3000
 | `AUTH_ENABLED`, `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Login e perfis |
 | `SEED_DEMO`, `SEED_CIB_DEMO`, `SEED_BCI_DEMO`, `SEED_DEMANDAS_DEMO`, `SEED_OS_DEMO` | Carregar demonstrações no boot |
 | `PUBLIC_BASE_URL` | Endereço usado no QR de validação dos documentos |
+| `INSTANCIAS`, `SSO_SECRET` | Troca de município pelo seletor do topo (outras prefeituras da equipe); troca sem nova senha |
+| `MODULOS` | Pacote contratado (inclui `api` para o acesso externo) |
 | `SINTER_API_URL`, `SINTER_API_TOKEN` | Envio de remessas por API (opcional) |
 | `CIB_SIMULAR_RETORNO` | Botão "Simular retorno" — **só para demonstração** |
 | `CIB_PRAZO_SINTER`, `CIB_CAPACIDADE_SEMANAL` | Prazo padrão e base da estimativa do diagnóstico |
@@ -187,6 +192,8 @@ npm start                   # http://localhost:3000
 ## 9. Produção e pontos de atenção
 
 - **Um deploy e um banco por prefeitura** (`MUNICIPIO` trava a instância) — `docs/adr/0001-um-deploy-por-prefeitura.md`.
+- **Vários municípios:** o seletor do topo leva à instância da outra prefeitura (`INSTANCIAS`). Com `SSO_SECRET`, a troca usa um ticket assinado de 60 s, uso único, só para o destino escolhido; o usuário precisa estar ativo lá e entra com o perfil de lá — `docs/adr/0002-troca-de-municipio.md`.
+- **Acesso externo:** API somente leitura `/api/externa/v1` (lotes, imóveis) em JSON/GeoJSON/CSV, chave por parceiro (só o hash fica no banco), escopos, limite por minuto, IPs, validade, revogação e registro de cada chamada. Dados pessoais só com finalidade e validade de até 1 ano, e com registro LGPD.
 - **Travas de produção** (`NODE_ENV=production`): sem login, com segredo fraco, sem `MUNICIPIO`/`PUBLIC_BASE_URL` ou com flag de demonstração, o servidor não sobe.
 - **Integridade:** documentos, auditoria, acessos LGPD e arquivos de remessa são imutáveis no banco (trigger); hash SHA-256 sobre JCS (RFC 8785); numeração transacional.
 - **Migrations** versionadas e **backup com restauração testada** — `docs/operacao.md`.

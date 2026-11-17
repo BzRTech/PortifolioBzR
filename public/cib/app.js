@@ -19,7 +19,7 @@ async function render() {
   const v = el('view');
   v.innerHTML = '<div class="vazio">Carregando…</div>';
   try {
-    await ({ painel, imoveis, ciclo, remessas, conciliacao, vistoria, implantacao, pgv, config, auditoria, usuarios }[S.tab] || painel)(v, S.params || {});
+    await ({ painel, imoveis, ciclo, remessas, conciliacao, vistoria, implantacao, pgv, config, auditoria, usuarios, api: acessoExterno }[S.tab] || painel)(v, S.params || {});
   } catch (e) { v.innerHTML = `<div class="vazio">Erro: ${esc(e.message)}</div>`; }
   atualizarBadges();
 }
@@ -900,6 +900,75 @@ async function usuarios(v) {
   };
 }
 
+// ------------------------------------------------------------------ ACESSO EXTERNO (admin)
+async function acessoExterno(v) {
+  const [chaves, escopos, acessos] = await Promise.all([G.get('/api/externa/chaves'), G.get('/api/externa/escopos'), G.get('/api/externa/acessos?limit=200')]);
+  const ROT = { lotes: 'Lotes', cadastro: 'Cadastro técnico', valores: 'Valor venal', pessoais: 'Dados pessoais (LGPD)' };
+  const base = location.origin + '/api/externa/v1';
+  const ativas = chaves.filter((c) => c.situacao === 'ativa');
+  const usos = chaves.reduce((s, c) => s + c.usos, 0);
+  v.innerHTML = `${cabecalho('Integração', 'Acesso externo — dados de cada lote',
+    'Parceiros (cartório, secretarias, Receita Estadual, consórcio, sistemas da prefeitura) baixam os dados de cada lote em <strong>JSON, GeoJSON ou CSV</strong> com uma chave própria. Só leitura, com escopo, limite por minuto, validade e revogação. Cada chamada fica registrada; dados pessoais exigem finalidade e entram no registro LGPD. <a href="/api-externa" target="_blank">Documentação para o parceiro ↗</a>',
+    '<button class="b pri" id="bt-nova">＋ Nova chave</button>')}
+    <div class="cards">
+      <div class="kpi verde"><div class="l">chaves ativas</div><div class="v">${G.num(ativas.length)}</div><div class="s">${G.num(chaves.length - ativas.length)} revogadas/expiradas</div></div>
+      <div class="kpi"><div class="l">chamadas registradas</div><div class="v">${G.num(usos)}</div><div class="s">${acessos[0] ? 'última ' + G.dataHora(acessos[0].created_at) : 'nenhuma ainda'}</div></div>
+      <div class="kpi amarelo"><div class="l">com dados pessoais</div><div class="v">${G.num(ativas.filter((c) => c.escopos.includes('pessoais')).length)}</div><div class="s">exigem finalidade e validade</div></div>
+      <div class="kpi"><div class="l">chamadas recusadas</div><div class="v">${G.num(acessos.filter((a) => a.status >= 400).length)}</div><div class="s">nas últimas ${acessos.length}</div></div>
+    </div>
+    <div class="subtabs"><button class="on" data-st="ch">Chaves (${chaves.length})</button><button data-st="ac">Chamadas recentes (${acessos.length})</button></div>
+    <div data-sv="ch"><div class="tbl-wrap"><table class="t"><thead><tr><th>Parceiro</th><th>Chave</th><th>Escopos</th><th>Limite</th><th>Validade</th><th>Último uso</th><th>Usos</th><th>Situação</th><th></th></tr></thead><tbody>
+    ${chaves.map((c) => `<tr><td><b>${esc(c.nome)}</b>${c.finalidade ? `<div class="small dim">${esc(c.finalidade)}</div>` : ''}<div class="small dim">criada por ${esc(c.criadoPor)} em ${G.dataHora(c.criadaEm)}</div></td>
+      <td class="mono small" style="white-space:nowrap">bzr_${esc(c.prefixo)}_••••</td>
+      <td>${c.escopos.map((e) => `<span class="pill ${e === 'pessoais' ? 'p-pendente_correcao' : 'p-pronto'}" title="${esc(escopos[e] || '')}">${esc(ROT[e] || e)}</span>`).join(' ')}</td>
+      <td class="small" style="white-space:nowrap">${c.limiteMin}/min${c.ipsPermitidos?.length ? `<div class="dim">IPs: ${esc(c.ipsPermitidos.join(', '))}</div>` : ''}</td>
+      <td class="small">${c.expiraEm ? new Date(c.expiraEm).toLocaleDateString('pt-BR') : 'sem validade'}</td>
+      <td class="small">${c.ultimoUsoEm ? G.dataHora(c.ultimoUsoEm) : '—'}</td><td class="num">${G.num(c.usos)}</td>
+      <td>${c.situacao === 'ativa' ? G.pill('valido', 'ativa') : G.pill('baixado', c.situacao)}${c.revogadaEm ? `<div class="small dim">${esc(c.revogadaPor)}${c.motivoRevogacao ? ' — ' + esc(c.motivoRevogacao) : ''}</div>` : ''}</td>
+      <td>${c.situacao === 'ativa' ? `<button class="b sm" data-rev="${c.id}">revogar</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="9" class="vazio">Nenhuma chave criada. Crie uma para cada parceiro — nunca compartilhe a mesma chave entre órgãos.</td></tr>'}</tbody></table></div></div>
+    <div data-sv="ac" hidden><div class="tbl-wrap"><table class="t"><thead><tr><th>Quando</th><th>Parceiro</th><th>Rota</th><th>Formato</th><th>Registros</th><th>Status</th><th>IP</th></tr></thead><tbody>
+    ${acessos.map((a) => `<tr><td class="small" style="white-space:nowrap">${G.dataHora(a.created_at)}</td><td>${esc(a.chave_nome)}</td><td class="mono small">${esc(a.rota)}${Object.keys(a.parametros || {}).length ? `<span class="dim">?${esc(new URLSearchParams(a.parametros).toString())}</span>` : ''}</td>
+      <td class="small">${esc(a.formato)}</td><td class="num">${G.num(a.registros)}</td><td>${a.status < 400 ? G.pill('ok', String(a.status)) : G.pill('rejeitada', String(a.status))}</td><td class="mono small">${esc(a.ip)}</td></tr>`).join('') || '<tr><td colspan="7" class="vazio">Nenhuma chamada ainda.</td></tr>'}</tbody></table></div></div>`;
+  v.querySelectorAll('.subtabs button').forEach((b) => (b.onclick = () => {
+    v.querySelectorAll('.subtabs button').forEach((x) => x.classList.toggle('on', x === b));
+    v.querySelectorAll('[data-sv]').forEach((s) => (s.hidden = s.dataset.sv !== b.dataset.st));
+  }));
+  v.querySelectorAll('[data-rev]').forEach((b) => (b.onclick = async () => {
+    const motivo = await G.confirmar('Revogar chave', 'A chave para de funcionar na hora e não pode ser reativada (crie outra se precisar). O histórico de chamadas é mantido.', { campo: 'Motivo', rotulo: 'Revogar' });
+    if (motivo === null) return;
+    try { await G.post(`/api/externa/chaves/${b.dataset.rev}/revogar`, { motivo }); G.toast('Chave revogada.'); acessoExterno(v); } catch (e) { G.falha(e); }
+  }));
+  el('bt-nova').onclick = () => {
+    const umAno = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+    const m = G.modal({ titulo: 'Nova chave de acesso externo', largo: true, corpo: `<div class="f">
+      <label class="full">Parceiro (quem vai usar)<input id="k-n" placeholder="Ex.: Cartório do 1º Ofício de Registro de Imóveis" /></label>
+      <div class="full">${Object.entries(escopos).map(([k, t]) => `<label class="check" style="align-items:flex-start"><input type="checkbox" data-esc="${k}" ${k === 'lotes' ? 'checked' : ''} /><span><b>${esc(ROT[k] || k)}</b> — <span class="small">${esc(t)}</span></span></label>`).join('')}</div>
+      <label class="full">Finalidade / base legal — obrigatória para dados pessoais<textarea id="k-f" placeholder="Ex.: Convênio nº 12/2026 — conferência de matrícula e ITBI (LGPD art. 7º, III e art. 23)"></textarea></label>
+      <label>Validade<input id="k-x" type="date" value="${umAno}" /></label>
+      <label>Limite por minuto<input id="k-l" type="number" min="1" max="6000" value="60" /></label>
+      <label class="full">IPs permitidos (opcional, separados por vírgula — vazio = qualquer IP)<input id="k-i" placeholder="200.100.50.10, 200.100.50.11" /></label></div>`,
+      rodape: `<span></span><div class="g-actions"><button class="b" data-a="c">Cancelar</button><button class="b pri" data-a="s">Criar chave</button></div>` });
+    m.$('[data-a=c]').onclick = m.fechar;
+    m.$('[data-a=s]').onclick = async () => {
+      const body = { nome: m.$('#k-n').value, escopos: [...m.$$('[data-esc]')].filter((x) => x.checked).map((x) => x.dataset.esc), finalidade: m.$('#k-f').value,
+        expiraEm: m.$('#k-x').value ? m.$('#k-x').value + 'T23:59:59-03:00' : null, limiteMin: Number(m.$('#k-l').value), ipsPermitidos: m.$('#k-i').value };
+      try {
+        const r = await G.post('/api/externa/chaves', body);
+        m.fechar();
+        const exemplo = r.escopos.includes('lotes')
+          ? `curl -H "Authorization: Bearer ${r.chave}" \\\n  "${base}/lotes?bairro=Centro&formato=csv" -o lotes.csv`
+          : `curl -H "Authorization: Bearer ${r.chave}" \\\n  "${base}/imoveis?por_pagina=100"`;
+        const k = G.modal({ titulo: 'Chave criada — copie agora', largo: true, corpo: `<p style="margin-top:0"><b>${esc(r.nome)}</b>. Esta é a única vez que a chave aparece: guarde-a num cofre de senhas e envie ao parceiro por canal seguro.</p>
+          <div class="box"><code class="mono" style="word-break:break-all;font-size:13px">${esc(r.chave)}</code></div>
+          <p class="small dim" style="margin:12px 0 4px">Exemplo de uso</p><pre class="box mono small" style="white-space:pre-wrap;word-break:break-all;margin:0">${esc(exemplo)}</pre>`,
+          rodape: `<a class="b" href="/api-externa" target="_blank">Documentação ↗</a><div class="g-actions"><button class="b" data-a="cp">Copiar chave</button><button class="b pri" data-a="ok">Já copiei</button></div>`, aoFechar: () => acessoExterno(v) });
+        k.$('[data-a=cp]').onclick = async () => { try { await navigator.clipboard.writeText(r.chave); G.toast('Chave copiada.'); } catch { G.toast('Selecione e copie manualmente.'); } };
+        k.$('[data-a=ok]').onclick = k.fechar;
+      } catch (e) { G.falha(e); }
+    };
+  };
+}
+
 // ------------------------------------------------------------------ boot
 window.addEventListener('hashchange', () => {
   const [t, a] = location.hash.slice(1).split(':');
@@ -908,9 +977,12 @@ window.addEventListener('hashchange', () => {
 
 (async () => {
   if (!(await G.iniciar({ aoTrocar: () => render() }))) return;
-  if (!G.auth || G.user?.role === 'admin') el('tab-usuarios').hidden = false;
+  if (!G.auth || G.user?.role === 'admin') {
+    el('tab-usuarios').hidden = false;
+    if (!window.BZR_MODULOS || window.BZR_MODULOS.includes('api')) el('tab-api').hidden = false;
+  }
   const h = location.hash.slice(1);
   const q = new URLSearchParams(location.search).get('q');
   if (q) return irPara('imoveis', { q });
-  irPara(['painel', 'imoveis', 'ciclo', 'remessas', 'conciliacao', 'vistoria', 'implantacao', 'pgv', 'config', 'auditoria', 'usuarios'].includes(h) ? h : 'painel');
+  irPara(['painel', 'imoveis', 'ciclo', 'remessas', 'conciliacao', 'vistoria', 'implantacao', 'pgv', 'config', 'auditoria', 'usuarios', 'api'].includes(h) ? h : 'painel');
 })();

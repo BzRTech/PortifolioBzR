@@ -118,7 +118,9 @@ geométrica do lote, matrícula, CEP) ficam em `src/cib-validacao.js`.
 - Login em todas as APIs internas (Território e O.S. inclusive); perfis **admin, coordenador, técnico e gestor (somente leitura)**; limite de tentativas no login e nas páginas públicas de validação/protocolo.
 - **Migrations versionadas** (`migrations/`, `npm run migrate`), **backup com restauração testada** (`npm run backup` / `npm run restore-test`), documentos e trilhas **imutáveis no banco** (trigger), numeração sem duplicidade (numeradores transacionais).
 - **LGPD:** CPF/CNPJ mascarado nas listas e fichas, acesso ao dado completo com finalidade e registro; exportações com CPF só para admin/coordenador.
-- Módulos por cliente: `MODULOS=cib,documentos,territorio`.
+- Módulos por cliente: `MODULOS=cib,documentos,territorio,api`.
+- **Vários municípios:** o seletor do topo troca de prefeitura (`INSTANCIAS`), cada uma no seu deploy e banco; com `SSO_SECRET` a troca não pede senha de novo e o perfil é o de cada prefeitura — [`docs/adr/0002-troca-de-municipio.md`](docs/adr/0002-troca-de-municipio.md).
+- **Acesso externo (API de dados por lote):** parceiros baixam lotes e imóveis em JSON, GeoJSON ou CSV com chave própria, escopo, limite por minuto, validade e revogação; cada chamada é registrada. Gestão em CIB/Sinter → *Acesso externo*; documentação para o parceiro em `/api-externa`.
 - Testes: `npm test` (com `TEST_DATABASE_URL`, também os de integração).
 - Passo a passo: [`docs/operacao.md`](docs/operacao.md).
 
