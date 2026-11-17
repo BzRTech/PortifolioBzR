@@ -122,6 +122,18 @@ async function exigirImovelDo(req, imovelId) {
   return r.id;
 }
 
+// Município do portal: o da instância (MUNICIPIO). Na demonstração, sem município
+// fixo, o que tem cadastro (o com mais imóveis) — senão o portal não acharia ninguém.
+let padrao = { em: 0, m: '' };
+export async function municipioPortal(req) {
+  const m = muniDe(req);
+  if (m) return m;
+  if (Date.now() - padrao.em < 60000) return padrao.m;
+  const r = (await query(`SELECT municipio FROM imoveis WHERE municipio <> '' GROUP BY 1 ORDER BY count(*) DESC, 1 LIMIT 1`)).rows[0];
+  padrao = { em: Date.now(), m: r?.municipio || '' };
+  return padrao.m;
+}
+
 // ---- Rotas ---------------------------------------------------------------------
 export const cidadaoRouter = Router();
 // Anti-força-bruta: por IP em todas as entradas; por CPF nas falhas.
@@ -132,7 +144,7 @@ const falhou = (req, doc) => { contarFalha(`cid-falha:${doc}`, HORA); contarFalh
 const bloqueadoIp = (req) => excedeu(`cid-falha-ip:${req.ip}`, { janelaMs: HORA, max: 20 });
 
 async function entrar(req, res, { doc, metodo, detalhe = '' }) {
-  const m = muniDe(req);
+  const m = await municipioPortal(req);
   const nome = await nomeDo(m, doc);
   const token = emitirSessao({ doc, nome, metodo, municipio: m });
   req.user = { uid: null, role: 'cidadao', nome: `Cidadão: ${nome || mascararDoc(doc)}` };
@@ -142,9 +154,10 @@ async function entrar(req, res, { doc, metodo, detalhe = '' }) {
 }
 
 cidadaoRouter.get('/api/cidadao/config', asyncRoute(async (req, res) => {
-  const cfg = await getConfig(muniDe(req));
+  const municipio = await municipioPortal(req);
+  const cfg = await getConfig(municipio);
   res.json({
-    municipio: muniDe(req), nomeOficial: cfg.nomeOficial, secretaria: cfg.secretaria, setor: cfg.setor, telefone: cfg.telefone, email: cfg.email, endereco: cfg.endereco, horario: cfg.horarioAtendimento, whatsapp: cfg.whatsapp,
+    municipio, nomeOficial: cfg.nomeOficial, secretaria: cfg.secretaria, setor: cfg.setor, telefone: cfg.telefone, email: cfg.email, endereco: cfg.endereco, horario: cfg.horarioAtendimento, whatsapp: cfg.whatsapp,
     brasao: /^(data:image\/(png|jpeg|svg\+xml);base64,|https:\/\/)/.test(cfg.brasao) ? cfg.brasao : '', cor: /^#[0-9a-f]{6}$/i.test(cfg.corPrimaria) ? cfg.corPrimaria : '',
     metodos: metodosAtivos(), demonstracao: !PRODUCAO && !emailConfigurado(), sessaoMin: SESSAO_MIN,
     documentos: docsPortal().map((id) => ({ id, titulo: TIPOS_DOC[id].titulo })),
@@ -160,7 +173,7 @@ cidadaoRouter.post('/api/cidadao/entrar/inscricao', limiteEntrada, asyncRoute(as
   const inscricao = String(req.body?.inscricao || '').trim();
   if (!niValido(doc) || !inscricao) throw erro(400, 'Informe um CPF/CNPJ válido e a inscrição do imóvel (está no carnê do IPTU).');
   if (bloqueadoDoc(doc) || bloqueadoIp(req)) throw erro(429, 'Muitas tentativas sem sucesso. Aguarde uma hora ou entre com gov.br.');
-  const ok = (await query('SELECT 1 FROM imoveis WHERE municipio = $1 AND contribuinte_doc = $2 AND inscricao = $3', [muniDe(req), doc, inscricao])).rows.length;
+  const ok = (await query('SELECT 1 FROM imoveis WHERE municipio = $1 AND contribuinte_doc = $2 AND inscricao = $3', [await municipioPortal(req), doc, inscricao])).rows.length;
   if (!ok) { falhou(req, doc); throw erro(401, 'CPF/CNPJ e inscrição não conferem com o cadastro. Confira os dados no carnê do IPTU.'); }
   res.json(await entrar(req, res, { doc, metodo: 'inscricao', detalhe: `inscrição ${inscricao}` }));
 }));
@@ -170,7 +183,7 @@ cidadaoRouter.post('/api/cidadao/entrar/codigo', limiteEntrada, asyncRoute(async
   if (!metodosAtivos().includes('email')) throw erro(403, 'Esta forma de entrada não está habilitada.');
   const doc = normalizarNi(req.body?.doc);
   if (!niValido(doc)) throw erro(400, 'Informe um CPF/CNPJ válido.');
-  const m = muniDe(req);
+  const m = await municipioPortal(req);
   const aviso = { ok: true, mensagem: 'Se este CPF/CNPJ tiver e-mail no cadastro imobiliário, você receberá um código de 6 dígitos em instantes. Ele vale por 10 minutos.' };
   if (excedeu(`cid-cod:${doc}`, { janelaMs: HORA, max: 3 })) throw erro(429, 'Você já pediu 3 códigos na última hora. Aguarde ou entre com gov.br.');
   contarFalha(`cid-cod:${doc}`, HORA);
@@ -194,7 +207,7 @@ cidadaoRouter.post('/api/cidadao/entrar/confirmar', limiteEntrada, asyncRoute(as
   const codigo = String(req.body?.codigo || '').replace(/\D/g, '');
   if (!niValido(doc) || codigo.length !== 6) throw erro(400, 'Informe o CPF/CNPJ e o código de 6 dígitos.');
   if (bloqueadoDoc(doc) || bloqueadoIp(req)) throw erro(429, 'Muitas tentativas sem sucesso. Aguarde uma hora.');
-  const c = (await query(`SELECT * FROM cidadao_codigos WHERE municipio = $1 AND doc = $2 AND usado_em IS NULL AND expira_em > now() ORDER BY id DESC LIMIT 1`, [muniDe(req), doc])).rows[0];
+  const c = (await query(`SELECT * FROM cidadao_codigos WHERE municipio = $1 AND doc = $2 AND usado_em IS NULL AND expira_em > now() ORDER BY id DESC LIMIT 1`, [await municipioPortal(req), doc])).rows[0];
   const hash = crypto.createHmac('sha256', CHAVE).update(`${doc}:${codigo}`).digest('hex');
   if (!c || c.tentativas >= 5 || !crypto.timingSafeEqual(Buffer.from(c.hash_codigo), Buffer.from(hash))) {
     if (c) await query('UPDATE cidadao_codigos SET tentativas = tentativas + 1 WHERE id = $1', [c.id]);

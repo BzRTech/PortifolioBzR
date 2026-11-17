@@ -928,10 +928,13 @@ cibRouter.use('/api/cib', requireAuth);
 // -- municipios e configuracao
 cibRouter.get('/api/cib/municipios', asyncRoute(async (req, res) => {
   if (MUNICIPIO_FIXO) return res.json([MUNICIPIO_FIXO]); // um deploy por prefeitura
+  // O município com cadastro vem primeiro (é o que abre por padrão na demonstração).
   const { rows } = await query(
-    `SELECT m AS municipio FROM (
+    `SELECT x.m AS municipio FROM (
        SELECT municipio AS m FROM municipio_config UNION SELECT DISTINCT municipio FROM imoveis
-       UNION SELECT DISTINCT COALESCE(municipio,'') FROM lotes) x ORDER BY 1`
+       UNION SELECT DISTINCT COALESCE(municipio,'') FROM lotes) x
+     LEFT JOIN (SELECT municipio, count(*) AS n FROM imoveis GROUP BY 1) i ON i.municipio = x.m
+     ORDER BY COALESCE(i.n, 0) DESC, (x.m = '') , 1`
   );
   res.json(rows.map((r) => r.municipio));
 }));

@@ -160,12 +160,12 @@ function buildCity() {
 }
 
 /** Gera e carrega a cidade de demonstracao. Reutilizado pelo servidor no boot. */
-export async function seedDemo({ truncate = true, log = () => {} } = {}) {
+export async function seedDemo({ truncate = true, municipio = null, log = () => {} } = {}) {
   await ensureSchema();
   const city = buildCity();
   const result = {};
   for (const layer of ['bairros', 'quadras', 'lotes', 'ruas', 'edificacoes']) {
-    const res = await importFeatureCollection(layer, fc(city[layer]), { truncate });
+    const res = await importFeatureCollection(layer, fc(city[layer]), { truncate, municipio });
     result[layer] = res.inserted;
     log(`  ${layer.padEnd(12)} ${String(res.inserted).padStart(5)} feicoes`);
   }

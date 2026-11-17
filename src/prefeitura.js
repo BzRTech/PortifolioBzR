@@ -12,6 +12,7 @@ import { getConfig } from './cib.js';
 import { MUNICIPIO_FIXO, modulosAtivos, origemDe } from './env.js';
 import { muniDe } from './util.js';
 import { query, isConfigured } from './db.js';
+import { municipioPortal } from './cidadao.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const linhas = (s) => esc(s).replace(/\r?\n/g, '<br>');
@@ -148,7 +149,7 @@ async function estatisticas(municipio) {
 export const prefeituraRouter = Router();
 async function enviarPagina(req, res) {
   if (!isConfigured) return res.status(503).send('Banco não configurado.');
-  const municipio = muniDe(req) || (await query('SELECT municipio FROM municipio_config ORDER BY updated_at DESC LIMIT 1')).rows[0]?.municipio || '';
+  const municipio = await municipioPortal(req) || (await query('SELECT municipio FROM municipio_config ORDER BY updated_at DESC LIMIT 1')).rows[0]?.municipio || '';
   const cfg = await getConfig(municipio);
   const mostrarNumeros = String(process.env.PAGINA_NUMEROS || 'true') !== 'false';
   res.set('Cache-Control', 'public, max-age=60');
